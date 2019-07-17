@@ -167,7 +167,7 @@ def show_lidar_with_boxes(pc_velo, objects, calib,
     for obj in objects:
         if obj.type=='DontCare':continue
         # Draw 3d bounding box
-        box3d_pts_2d, box3d_pts_3d = utils.compute_box_3d(obj, calib.P) 
+        box3d_pts_2d, box3d_pts_3d = utils.compute_box_3d(obj, calib.P)
         box3d_pts_3d_velo = calib.project_rect_to_velo(box3d_pts_3d)
         # Draw heading arrow
         ori3d_pts_2d, ori3d_pts_3d = utils.compute_orientation_3d(obj, calib.P)
@@ -177,6 +177,7 @@ def show_lidar_with_boxes(pc_velo, objects, calib,
         draw_gt_boxes3d([box3d_pts_3d_velo], fig=fig)
         mlab.plot3d([x1, x2], [y1, y2], [z1,z2], color=(0.5,0.5,0.5),
             tube_radius=None, line_width=1, figure=fig)
+    mlab.savefig('draw_line.jpg', figure=fig)
     mlab.show(1)
 
 def show_lidar_on_image(pc_velo, img, calib, img_width, img_height):
@@ -200,7 +201,7 @@ def show_lidar_on_image(pc_velo, img, calib, img_width, img_height):
     return img
 
 def dataset_viz():
-    dataset = kitti_object(os.path.join(ROOT_DIR, 'dataset/KITTI/object'))
+    dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'))
 
     for data_idx in range(len(dataset)):
         # Load data from dataset

@@ -13,6 +13,7 @@ def test_plot3d():
     z = numpy.sin(n_long * mu / n_mer) * 0.5
 
     l = plot3d(x, y, z, numpy.sin(mu), tube_radius=0.025, colormap='Spectral')
+    savefig('draw_line.jpg', figure=l)
     return l
 
 test_plot3d()
