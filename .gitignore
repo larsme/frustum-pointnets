@@ -18,3 +18,15 @@ models/tf_ops/grouping/selection_sort
 train/log_v1/
 
 train/log_v2/
+
+sunrgbd/sunrgbd_detection/gt_boxes/
+
+mayavi/kitti_sample_scan\.txt
+
+train/detection_results_v1/data/
+
+kitti/rgb_detections/rgb_detection_train\.txt
+
+kitti/rgb_detections/rgb_detection_val\.txt
+
+train/detection_results_v1/plot/

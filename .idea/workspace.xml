@@ -2,23 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="eb934e41-43d3-4685-a309-279245105d02" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/frustum-pointnets.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/kitti/kitti_object.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/kitti_object.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/kitti/kitti_util.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/kitti_util.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/kitti/prepare_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/prepare_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mayavi/test_drawline.py" beforeDir="false" afterPath="$PROJECT_DIR$/mayavi/test_drawline.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/frustum_pointnets_v1.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/frustum_pointnets_v1.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/frustum_pointnets_v2.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/frustum_pointnets_v2.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/model_util.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/model_util.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train/test.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/test.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/train.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train/train_util.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/train_util.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/command_test_v1.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_test_v1.sh" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -48,13 +34,22 @@
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/train/train.py">
+        <entry file="file://$PROJECT_DIR$/kitti/kitti_object.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="616">
-              <caret line="44" column="25" selection-start-line="44" selection-start-column="25" selection-end-line="44" selection-end-column="25" />
+            <state relative-caret-position="539">
+              <caret line="203" column="76" selection-start-line="203" selection-start-column="51" selection-end-line="203" selection-end-column="76" />
               <folding>
-                <element signature="e#80#117#0" expanded="true" />
+                <element signature="e#105#142#0" expanded="true" />
               </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/scripts/command_test_v1.sh">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="28">
+              <caret line="2" column="69" selection-start-line="2" selection-start-column="69" selection-end-line="2" selection-end-column="69" />
             </state>
           </provider>
         </entry>
@@ -62,17 +57,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/train/train_util.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="112">
+            <state relative-caret-position="87">
               <caret line="8" column="4" selection-start-line="8" selection-start-column="4" selection-end-line="8" selection-end-column="4" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/venv/local/lib/python2.7/site-packages/tensorflow/python/ops/variables.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="335">
-              <caret line="1390" column="4" selection-start-line="1390" selection-start-column="4" selection-end-line="1390" selection-end-column="4" />
             </state>
           </provider>
         </entry>
@@ -80,7 +66,7 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/models/model_util.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="328">
+            <state relative-caret-position="303">
               <caret line="277" column="4" selection-start-line="277" selection-start-column="4" selection-end-line="277" selection-end-column="4" />
               <folding>
                 <element signature="e#0#18#0" expanded="true" />
@@ -99,17 +85,17 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/models/frustum_pointnets_v1.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-948">
+            <state relative-caret-position="-973">
               <caret line="30" column="14" selection-start-line="30" selection-start-column="14" selection-end-line="30" selection-end-column="14" />
             </state>
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/train/test.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="742">
-              <caret line="345" column="50" lean-forward="true" selection-start-line="345" selection-start-column="50" selection-end-line="345" selection-end-column="50" />
+            <state relative-caret-position="140">
+              <caret line="302" selection-start-line="302" selection-end-line="302" />
             </state>
           </provider>
         </entry>
@@ -117,7 +103,7 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/models/frustum_pointnets_v2.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1008">
+            <state relative-caret-position="14">
               <caret line="77" selection-start-line="77" selection-end-line="77" />
             </state>
           </provider>
@@ -138,6 +124,8 @@
       <find>store</find>
       <find>get_model</find>
       <find>test_from_rgb_detection</find>
+      <find>of ground truth. Please write me an email!</find>
+      <find>object</find>
     </findStrings>
     <replaceStrings>
       <replace>./../../data/kitti_object</replace>
@@ -161,6 +149,7 @@
         <option value="$PROJECT_DIR$/models/model_util.py" />
         <option value="$PROJECT_DIR$/train/provider.py" />
         <option value="$PROJECT_DIR$/train/test.py" />
+        <option value="$PROJECT_DIR$/scripts/command_test_v1.sh" />
       </list>
     </option>
   </component>
@@ -365,25 +354,8 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/kitti/kitti_object.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="2408">
-          <caret line="178" column="55" selection-start-line="178" selection-start-column="55" selection-end-line="179" selection-end-column="45" />
-          <folding>
-            <element signature="e#105#142#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/models/tf_util.py">
       <provider selected="true" editor-type-id="text-editor" />
-    </entry>
-    <entry file="file://$PROJECT_DIR$/models/frustum_pointnets_v2.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1008">
-          <caret line="77" selection-start-line="77" selection-end-line="77" />
-        </state>
-      </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/venv/local/lib/python2.7/site-packages/tensorflow/python/ops/variables.py">
       <provider selected="true" editor-type-id="text-editor">
@@ -402,21 +374,28 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/models/frustum_pointnets_v1.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-948">
-          <caret line="30" column="14" selection-start-line="30" selection-start-column="14" selection-end-line="30" selection-end-column="14" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/models/pointnet_util.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="-2278" />
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/models/frustum_pointnets_v2.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="14">
+          <caret line="77" selection-start-line="77" selection-end-line="77" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/models/frustum_pointnets_v1.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-973">
+          <caret line="30" column="14" selection-start-line="30" selection-start-column="14" selection-end-line="30" selection-end-column="14" />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/models/model_util.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="328">
+        <state relative-caret-position="303">
           <caret line="277" column="4" selection-start-line="277" selection-start-column="4" selection-end-line="277" selection-end-column="4" />
           <folding>
             <element signature="e#0#18#0" expanded="true" />
@@ -424,11 +403,9 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/train/train_util.py">
+    <entry file="file://$PROJECT_DIR$/train/box_util.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="112">
-          <caret line="8" column="4" selection-start-line="8" selection-start-column="4" selection-end-line="8" selection-end-column="4" />
-        </state>
+        <state relative-caret-position="-2334" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/train/provider.py">
@@ -441,15 +418,34 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/train/box_util.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-2334" />
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/train/test.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="742">
-          <caret line="345" column="50" lean-forward="true" selection-start-line="345" selection-start-column="50" selection-end-line="345" selection-end-column="50" />
+        <state relative-caret-position="140">
+          <caret line="302" selection-start-line="302" selection-end-line="302" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/train/train_util.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="87">
+          <caret line="8" column="4" selection-start-line="8" selection-start-column="4" selection-end-line="8" selection-end-column="4" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/kitti/kitti_object.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="539">
+          <caret line="203" column="76" selection-start-line="203" selection-start-column="51" selection-end-line="203" selection-end-column="76" />
+          <folding>
+            <element signature="e#105#142#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/scripts/command_test_v1.sh">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="28">
+          <caret line="2" column="69" selection-start-line="2" selection-start-column="69" selection-end-line="2" selection-end-column="69" />
         </state>
       </provider>
     </entry>
