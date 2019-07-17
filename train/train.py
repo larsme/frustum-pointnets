@@ -116,9 +116,10 @@ def train():
             # Get model and losses 
             end_points = MODEL.get_model(pointclouds_pl, one_hot_vec_pl,
                 is_training_pl, bn_decay=bn_decay)
-            loss = MODEL.get_loss(labels_pl, centers_pl,
-                heading_class_label_pl, heading_residual_label_pl,
-                size_class_label_pl, size_residual_label_pl, end_points)
+            # loss = MODEL.get_loss(labels_pl, centers_pl,
+            #     heading_class_label_pl, heading_residual_label_pl,
+            #     size_class_label_pl, size_residual_label_pl, end_points)
+            loss = MODEL.get_loss(labels_pl, end_points)
             tf.summary.scalar('loss', loss)
 
             losses = tf.get_collection('losses')
@@ -126,18 +127,18 @@ def train():
             tf.summary.scalar('total_loss', total_loss)
 
             # Write summaries of bounding box IoU and segmentation accuracies
-            iou2ds, iou3ds = tf.py_func(provider.compute_box3d_iou, [\
-                end_points['center'], \
-                end_points['heading_scores'], end_points['heading_residuals'], \
-                end_points['size_scores'], end_points['size_residuals'], \
-                centers_pl, \
-                heading_class_label_pl, heading_residual_label_pl, \
-                size_class_label_pl, size_residual_label_pl], \
-                [tf.float32, tf.float32])
-            end_points['iou2ds'] = iou2ds 
-            end_points['iou3ds'] = iou3ds 
-            tf.summary.scalar('iou_2d', tf.reduce_mean(iou2ds))
-            tf.summary.scalar('iou_3d', tf.reduce_mean(iou3ds))
+            # iou2ds, iou3ds = tf.py_func(provider.compute_box3d_iou, [\
+            #     end_points['center'], \
+            #     end_points['heading_scores'], end_points['heading_residuals'], \
+            #     end_points['size_scores'], end_points['size_residuals'], \
+            #     centers_pl, \
+            #     heading_class_label_pl, heading_residual_label_pl, \
+            #     size_class_label_pl, size_residual_label_pl], \
+            #     [tf.float32, tf.float32])
+            # end_points['iou2ds'] = iou2ds
+            # end_points['iou3ds'] = iou3ds
+            # tf.summary.scalar('iou_2d', tf.reduce_mean(iou2ds))
+            # tf.summary.scalar('iou_3d', tf.reduce_mean(iou3ds))
 
             correct = tf.equal(tf.argmax(end_points['mask_logits'], 2),
                 tf.to_int64(labels_pl))
@@ -180,14 +181,14 @@ def train():
         ops = {'pointclouds_pl': pointclouds_pl,
                'one_hot_vec_pl': one_hot_vec_pl,
                'labels_pl': labels_pl,
-               'centers_pl': centers_pl,
-               'heading_class_label_pl': heading_class_label_pl,
-               'heading_residual_label_pl': heading_residual_label_pl,
-               'size_class_label_pl': size_class_label_pl,
-               'size_residual_label_pl': size_residual_label_pl,
+               # 'centers_pl': centers_pl,
+               # 'heading_class_label_pl': heading_class_label_pl,
+               # 'heading_residual_label_pl': heading_residual_label_pl,
+               # 'size_class_label_pl': size_class_label_pl,
+               # 'size_residual_label_pl': size_residual_label_pl,
                'is_training_pl': is_training_pl,
                'logits': end_points['mask_logits'],
-               'centers_pred': end_points['center'],
+               # 'centers_pred': end_points['center'],
                'loss': loss,
                'train_op': train_op,
                'merged': merged,
@@ -222,9 +223,9 @@ def train_one_epoch(sess, ops, train_writer):
     total_correct = 0
     total_seen = 0
     loss_sum = 0
-    iou2ds_sum = 0
-    iou3ds_sum = 0
-    iou3d_correct_cnt = 0
+    # iou2ds_sum = 0
+    # iou3ds_sum = 0
+    # iou3d_correct_cnt = 0
 
     # Training with batches
     for batch_idx in range(num_batches):
@@ -241,18 +242,22 @@ def train_one_epoch(sess, ops, train_writer):
         feed_dict = {ops['pointclouds_pl']: batch_data,
                      ops['one_hot_vec_pl']: batch_one_hot_vec,
                      ops['labels_pl']: batch_label,
-                     ops['centers_pl']: batch_center,
-                     ops['heading_class_label_pl']: batch_hclass,
-                     ops['heading_residual_label_pl']: batch_hres,
-                     ops['size_class_label_pl']: batch_sclass,
-                     ops['size_residual_label_pl']: batch_sres,
-                     ops['is_training_pl']: is_training,}
+                     # ops['centers_pl']: batch_center,
+                     # ops['heading_class_label_pl']: batch_hclass,
+                     # ops['heading_residual_label_pl']: batch_hres,
+                     # ops['size_class_label_pl']: batch_sclass,
+                     # ops['size_residual_label_pl']: batch_sres,
+                     ops['is_training_pl']: is_training, }
 
-        summary, step, _, loss_val, logits_val, centers_pred_val, \
-        iou2ds, iou3ds = \
+        # summary, step, _, loss_val, logits_val, centers_pred_val, \
+        # iou2ds, iou3ds = \
+        #     sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'],
+        #         ops['logits'], ops['centers_pred'],
+        #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
+        #         feed_dict=feed_dict)
+        summary, step, _, loss_val, logits_val = \
             sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'],
-                ops['logits'], ops['centers_pred'],
-                ops['end_points']['iou2ds'], ops['end_points']['iou3ds']], 
+                ops['logits']],
                 feed_dict=feed_dict)
 
         train_writer.add_summary(summary, step)
@@ -262,25 +267,25 @@ def train_one_epoch(sess, ops, train_writer):
         total_correct += correct
         total_seen += (BATCH_SIZE*NUM_POINT)
         loss_sum += loss_val
-        iou2ds_sum += np.sum(iou2ds)
-        iou3ds_sum += np.sum(iou3ds)
-        iou3d_correct_cnt += np.sum(iou3ds>=0.7)
+        # iou2ds_sum += np.sum(iou2ds)
+        # iou3ds_sum += np.sum(iou3ds)
+        # iou3d_correct_cnt += np.sum(iou3ds>=0.7)
 
         if (batch_idx+1)%10 == 0:
             log_string(' -- %03d / %03d --' % (batch_idx+1, num_batches))
             log_string('mean loss: %f' % (loss_sum / 10))
             log_string('segmentation accuracy: %f' % \
                 (total_correct / float(total_seen)))
-            log_string('box IoU (ground/3D): %f / %f' % \
-                (iou2ds_sum / float(BATCH_SIZE*10), iou3ds_sum / float(BATCH_SIZE*10)))
-            log_string('box estimation accuracy (IoU=0.7): %f' % \
-                (float(iou3d_correct_cnt)/float(BATCH_SIZE*10)))
+            # log_string('box IoU (ground/3D): %f / %f' % \
+            #     (iou2ds_sum / float(BATCH_SIZE*10), iou3ds_sum / float(BATCH_SIZE*10)))
+            # log_string('box estimation accuracy (IoU=0.7): %f' % \
+            #     (float(iou3d_correct_cnt)/float(BATCH_SIZE*10)))
             total_correct = 0
             total_seen = 0
             loss_sum = 0
-            iou2ds_sum = 0
-            iou3ds_sum = 0
-            iou3d_correct_cnt = 0
+            # iou2ds_sum = 0
+            # iou3ds_sum = 0
+            # iou3d_correct_cnt = 0
         
         
 def eval_one_epoch(sess, ops, test_writer):
@@ -300,9 +305,9 @@ def eval_one_epoch(sess, ops, test_writer):
     loss_sum = 0
     total_seen_class = [0 for _ in range(NUM_CLASSES)]
     total_correct_class = [0 for _ in range(NUM_CLASSES)]
-    iou2ds_sum = 0
-    iou3ds_sum = 0
-    iou3d_correct_cnt = 0
+    # iou2ds_sum = 0
+    # iou3ds_sum = 0
+    # iou3d_correct_cnt = 0
    
     # Simple evaluation with batches 
     for batch_idx in range(num_batches):
@@ -319,17 +324,21 @@ def eval_one_epoch(sess, ops, test_writer):
         feed_dict = {ops['pointclouds_pl']: batch_data,
                      ops['one_hot_vec_pl']: batch_one_hot_vec,
                      ops['labels_pl']: batch_label,
-                     ops['centers_pl']: batch_center,
-                     ops['heading_class_label_pl']: batch_hclass,
-                     ops['heading_residual_label_pl']: batch_hres,
-                     ops['size_class_label_pl']: batch_sclass,
-                     ops['size_residual_label_pl']: batch_sres,
+                     # ops['centers_pl']: batch_center,
+                     # ops['heading_class_label_pl']: batch_hclass,
+                     # ops['heading_residual_label_pl']: batch_hres,
+                     # ops['size_class_label_pl']: batch_sclass,
+                     # ops['size_residual_label_pl']: batch_sres,
                      ops['is_training_pl']: is_training}
 
-        summary, step, loss_val, logits_val, iou2ds, iou3ds = \
+        # summary, step, loss_val, logits_val, iou2ds, iou3ds = \
+        #     sess.run([ops['merged'], ops['step'],
+        #         ops['loss'], ops['logits'],
+        #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
+        #         feed_dict=feed_dict)
+        summary, step, loss_val, logits_val = \
             sess.run([ops['merged'], ops['step'],
-                ops['loss'], ops['logits'], 
-                ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
+                ops['loss'], ops['logits']],
                 feed_dict=feed_dict)
         test_writer.add_summary(summary, step)
 
@@ -341,9 +350,9 @@ def eval_one_epoch(sess, ops, test_writer):
         for l in range(NUM_CLASSES):
             total_seen_class[l] += np.sum(batch_label==l)
             total_correct_class[l] += (np.sum((preds_val==l) & (batch_label==l)))
-        iou2ds_sum += np.sum(iou2ds)
-        iou3ds_sum += np.sum(iou3ds)
-        iou3d_correct_cnt += np.sum(iou3ds>=0.7)
+        # iou2ds_sum += np.sum(iou2ds)
+        # iou3ds_sum += np.sum(iou3ds)
+        # iou3d_correct_cnt += np.sum(iou3ds>=0.7)
 
         for i in range(BATCH_SIZE):
             segp = preds_val[i,:]
@@ -362,11 +371,11 @@ def eval_one_epoch(sess, ops, test_writer):
     log_string('eval segmentation avg class acc: %f' % \
         (np.mean(np.array(total_correct_class) / \
             np.array(total_seen_class,dtype=np.float))))
-    log_string('eval box IoU (ground/3D): %f / %f' % \
-        (iou2ds_sum / float(num_batches*BATCH_SIZE), iou3ds_sum / \
-            float(num_batches*BATCH_SIZE)))
-    log_string('eval box estimation accuracy (IoU=0.7): %f' % \
-        (float(iou3d_correct_cnt)/float(num_batches*BATCH_SIZE)))
+    # log_string('eval box IoU (ground/3D): %f / %f' % \
+    #     (iou2ds_sum / float(num_batches*BATCH_SIZE), iou3ds_sum / \
+    #         float(num_batches*BATCH_SIZE)))
+    # log_string('eval box estimation accuracy (IoU=0.7): %f' % \
+    #     (float(iou3d_correct_cnt)/float(num_batches*BATCH_SIZE)))
          
     EPOCH_CNT += 1
 

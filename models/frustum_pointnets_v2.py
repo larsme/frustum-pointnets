@@ -143,29 +143,29 @@ def get_model(point_cloud, one_hot_vec, is_training, bn_decay=None):
         is_training, bn_decay, end_points)
     end_points['mask_logits'] = logits
 
-    # Masking
-    # select masked points and translate to masked points' centroid
-    object_point_cloud_xyz, mask_xyz_mean, end_points = \
-        point_cloud_masking(point_cloud, logits, end_points)
-
-    # T-Net and coordinate translation
-    center_delta, end_points = get_center_regression_net(\
-        object_point_cloud_xyz, one_hot_vec,
-        is_training, bn_decay, end_points)
-    stage1_center = center_delta + mask_xyz_mean # Bx3
-    end_points['stage1_center'] = stage1_center
-    # Get object point cloud in object coordinate
-    object_point_cloud_xyz_new = \
-        object_point_cloud_xyz - tf.expand_dims(center_delta, 1)
-
-    # Amodel Box Estimation PointNet
-    output, end_points = get_3d_box_estimation_v2_net(\
-        object_point_cloud_xyz_new, one_hot_vec,
-        is_training, bn_decay, end_points)
-
-    # Parse output to 3D box parameters
-    end_points = parse_output_to_tensors(output, end_points)
-    end_points['center'] = end_points['center_boxnet'] + stage1_center # Bx3
+    # # Masking
+    # # select masked points and translate to masked points' centroid
+    # object_point_cloud_xyz, mask_xyz_mean, end_points = \
+    #     point_cloud_masking(point_cloud, logits, end_points)
+    #
+    # # T-Net and coordinate translation
+    # center_delta, end_points = get_center_regression_net(\
+    #     object_point_cloud_xyz, one_hot_vec,
+    #     is_training, bn_decay, end_points)
+    # stage1_center = center_delta + mask_xyz_mean # Bx3
+    # end_points['stage1_center'] = stage1_center
+    # # Get object point cloud in object coordinate
+    # object_point_cloud_xyz_new = \
+    #     object_point_cloud_xyz - tf.expand_dims(center_delta, 1)
+    #
+    # # Amodel Box Estimation PointNet
+    # output, end_points = get_3d_box_estimation_v2_net(\
+    #     object_point_cloud_xyz_new, one_hot_vec,
+    #     is_training, bn_decay, end_points)
+    #
+    # # Parse output to 3D box parameters
+    # end_points = parse_output_to_tensors(output, end_points)
+    # end_points['center'] = end_points['center_boxnet'] + stage1_center # Bx3
 
     return end_points
 
