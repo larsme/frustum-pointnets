@@ -52,7 +52,8 @@ NUM_CLASSES = 2 # segmentation has two classes
 MODEL = importlib.import_module(FLAGS.model) # import network module
 MODEL_FILE = os.path.join(ROOT_DIR, 'models', FLAGS.model+'.py')
 LOG_DIR = FLAGS.log_dir
-if not os.path.exists(LOG_DIR): os.mkdir(LOG_DIR)
+if not os.path.isdir(LOG_DIR):
+    os.mkdir(LOG_DIR)
 os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
 os.system('cp %s %s' % (os.path.join(BASE_DIR, 'train.py'), LOG_DIR))
 LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'w')
@@ -63,9 +64,11 @@ BN_DECAY_DECAY_RATE = 0.5
 BN_DECAY_DECAY_STEP = float(DECAY_STEP)
 BN_DECAY_CLIP = 0.99
 
+
+
 # Load Frustum Datasets. Use default data paths.
 TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train',
-    rotate_to_center=True, random_flip=True, random_shift=True, one_hot=True)
+    rotate_to_center=True, random_flip=True, random_shift=False, one_hot=True)
 TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val',
     rotate_to_center=True, one_hot=True)
 
@@ -95,9 +98,13 @@ def get_bn_decay(batch):
     return bn_decay
 
 def train():
+
+
     ''' Main function for training and simple evaluation. '''
     with tf.Graph().as_default():
+        epsilon = tf.constant(1e-12, tf.float32)
         with tf.device('/gpu:'+str(GPU_INDEX)):
+
             pointclouds_pl, one_hot_vec_pl, labels_pl, centers_pl, \
             heading_class_label_pl, heading_residual_label_pl, \
             size_class_label_pl, size_residual_label_pl = \
@@ -116,15 +123,30 @@ def train():
             # Get model and losses 
             end_points = MODEL.get_model(pointclouds_pl, one_hot_vec_pl,
                 is_training_pl, bn_decay=bn_decay)
+
             # loss = MODEL.get_loss(labels_pl, centers_pl,
             #     heading_class_label_pl, heading_residual_label_pl,
             #     size_class_label_pl, size_residual_label_pl, end_points)
             loss = MODEL.get_loss(labels_pl, end_points)
             tf.summary.scalar('loss', loss)
 
-            losses = tf.get_collection('losses')
-            total_loss = tf.add_n(losses, name='total_loss')
-            tf.summary.scalar('total_loss', total_loss)
+            # losses = tf.get_collection('losses')
+            # total_loss = tf.add_n(losses, name='total_loss')
+            # tf.summary.scalar('total_loss', total_loss)
+
+            pred_label = tf.argmax(end_points['mask_logits'], axis=2, output_type=tf.int32)
+            tps = tf.to_float(tf.reduce_sum(labels_pl * pred_label, axis=1))
+            fns = tf.to_float(tf.reduce_sum(labels_pl * (1 - pred_label), axis=1))
+            fps = tf.to_float(tf.reduce_sum((1 - labels_pl) * pred_label, axis=1))
+
+            iiou = tps / (tps + fns + fps + epsilon)
+            ipr = tps / (tps + fps + epsilon)
+            ire = tps / (tps + fns + epsilon)
+
+            tf.summary.scalar('iIOU', tf.reduce_mean(iiou))
+            tf.summary.scalar('iPrecision', tf.reduce_mean(ipr))
+            tf.summary.scalar('iRecall', tf.reduce_mean(ire))
+
 
             # Write summaries of bounding box IoU and segmentation accuracies
             # iou2ds, iou3ds = tf.py_func(provider.compute_box3d_iou, [\

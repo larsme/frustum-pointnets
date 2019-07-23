@@ -300,7 +300,7 @@ def get_loss(mask_label, end_points):
     # 3D Segmentation loss
     mask_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(\
         logits=end_points['mask_logits'], labels=mask_label))
-    tf.summary.scalar('3d mask loss', mask_loss)
+    # tf.summary.scalar('3d mask loss', mask_loss)
 
     # # Center regression losses
     # center_dist = tf.norm(center_label - end_points['center'], axis=-1)
@@ -397,6 +397,6 @@ def get_loss(mask_label, end_points):
     # tf.add_to_collection('losses', total_loss)
 
     total_loss = mask_loss
-    tf.add_to_collection('losses', total_loss)
+    # tf.add_to_collection('losses', total_loss)
 
     return total_loss

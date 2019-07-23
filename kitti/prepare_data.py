@@ -155,7 +155,7 @@ def extract_frustum_data(idx_filename, split, output_filename, viz=False,
         
     Input:
         idx_filename: string, each line of the file is a sample ID
-        split: string, either trianing or testing
+        split: string, either training or testing
         output_filename: string, the name for output .pickle file
         viz: bool, whether to visualize extracted data
         perturb_box2d: bool, whether to perturb the box2d
@@ -317,7 +317,7 @@ def read_det_file(det_filename):
         box2d_list.append(np.array([float(t[i]) for i in range(3,7)]))
     return id_list, type_list, box2d_list, prob_list
 
- 
+
 def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
                                        viz=False,
                                        type_whitelist=['Car'],
@@ -326,7 +326,7 @@ def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
     ''' Extract point clouds in frustums extruded from 2D detection boxes.
         Update: Lidar points and 3d boxes are in *rect camera* coord system
             (as that in 3d box label files)
-        
+
     Input:
         det_filename: string, each line is
             img_path typeid confidence xmin ymin xmax ymax
@@ -343,55 +343,55 @@ def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
         read_det_file(det_filename)
     cache_id = -1
     cache = None
-    
+
     id_list = []
     type_list = []
     box2d_list = []
     prob_list = []
-    input_list = [] # channel number = 4, xyz,intensity in rect camera coord
+    input_list = []  # channel number = 4, xyz,intensity in rect camera coord
     frustum_angle_list = [] # angle of 2d box center from pos x-axis
 
     for det_idx in range(len(det_id_list)):
         data_idx = det_id_list[det_idx]
         print('det idx: %d/%d, data idx: %d' % \
-            (det_idx, len(det_id_list), data_idx))
+              (det_idx, len(det_id_list), data_idx))
         if cache_id != data_idx:
-            calib = dataset.get_calibration(data_idx) # 3 by 4 matrix
+            calib = dataset.get_calibration(data_idx)  # 3 by 4 matrix
             pc_velo = dataset.get_lidar(data_idx)
             pc_rect = np.zeros_like(pc_velo)
-            pc_rect[:,0:3] = calib.project_velo_to_rect(pc_velo[:,0:3])
-            pc_rect[:,3] = pc_velo[:,3]
+            pc_rect[:, 0:3] = calib.project_velo_to_rect(pc_velo[:, 0:3])
+            pc_rect[:, 3] = pc_velo[:, 3]
             img = dataset.get_image(data_idx)
             img_height, img_width, img_channel = img.shape
-            _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov(\
-                pc_velo[:,0:3], calib, 0, 0, img_width, img_height, True)
-            cache = [calib,pc_rect,pc_image_coord,img_fov_inds]
+            _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov( \
+                pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
+            cache = [calib, pc_rect, pc_image_coord, img_fov_inds]
             cache_id = data_idx
         else:
-            calib,pc_rect,pc_image_coord,img_fov_inds = cache
+            calib, pc_rect, pc_image_coord, img_fov_inds = cache
 
         if det_type_list[det_idx] not in type_whitelist: continue
 
-        # 2D BOX: Get pts rect backprojected 
-        xmin,ymin,xmax,ymax = det_box2d_list[det_idx]
-        box_fov_inds = (pc_image_coord[:,0]<xmax) & \
-            (pc_image_coord[:,0]>=xmin) & \
-            (pc_image_coord[:,1]<ymax) & \
-            (pc_image_coord[:,1]>=ymin)
+        # 2D BOX: Get pts rect backprojected
+        xmin, ymin, xmax, ymax = det_box2d_list[det_idx]
+        box_fov_inds = (pc_image_coord[:, 0] < xmax) & \
+                       (pc_image_coord[:, 0] >= xmin) & \
+                       (pc_image_coord[:, 1] < ymax) & \
+                       (pc_image_coord[:, 1] >= ymin)
         box_fov_inds = box_fov_inds & img_fov_inds
-        pc_in_box_fov = pc_rect[box_fov_inds,:]
+        pc_in_box_fov = pc_rect[box_fov_inds, :]
         # Get frustum angle (according to center pixel in 2D BOX)
-        box2d_center = np.array([(xmin+xmax)/2.0, (ymin+ymax)/2.0])
-        uvdepth = np.zeros((1,3))
-        uvdepth[0,0:2] = box2d_center
-        uvdepth[0,2] = 20 # some random depth
+        box2d_center = np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0])
+        uvdepth = np.zeros((1, 3))
+        uvdepth[0, 0:2] = box2d_center
+        uvdepth[0, 2] = 20  # some random depth
         box2d_center_rect = calib.project_image_to_rect(uvdepth)
-        frustum_angle = -1 * np.arctan2(box2d_center_rect[0,2],
-            box2d_center_rect[0,0])
-        
+        frustum_angle = -1 * np.arctan2(box2d_center_rect[0, 2],
+                                        box2d_center_rect[0, 0])
+
         # Pass objects that are too small
-        if ymax-ymin<img_height_threshold or \
-            len(pc_in_box_fov)<lidar_point_threshold:
+        if ymax - ymin < img_height_threshold or \
+                len(pc_in_box_fov) < lidar_point_threshold:
             continue
        
         id_list.append(data_idx)
@@ -400,27 +400,27 @@ def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
         prob_list.append(det_prob_list[det_idx])
         input_list.append(pc_in_box_fov)
         frustum_angle_list.append(frustum_angle)
-    
-    with open(output_filename,'wb') as fp:
+
+    with open(output_filename, 'wb') as fp:
         pickle.dump(id_list, fp)
-        pickle.dump(box2d_list,fp)
+        pickle.dump(box2d_list, fp)
         pickle.dump(input_list, fp)
         pickle.dump(type_list, fp)
         pickle.dump(frustum_angle_list, fp)
         pickle.dump(prob_list, fp)
-    
+
     if viz:
         import mayavi.mlab as mlab
         for i in range(10):
             p1 = input_list[i]
-            fig = mlab.figure(figure=None, bgcolor=(0.4,0.4,0.4),
-                fgcolor=None, engine=None, size=(500, 500))
-            mlab.points3d(p1[:,0], p1[:,1], p1[:,2], p1[:,1], mode='point',
-                colormap='gnuplot', scale_factor=1, figure=fig)
-            fig = mlab.figure(figure=None, bgcolor=(0.4,0.4,0.4),
-                fgcolor=None, engine=None, size=(500, 500))
-            mlab.points3d(p1[:,2], -p1[:,0], -p1[:,1], seg, mode='point',
-                colormap='gnuplot', scale_factor=1, figure=fig)
+            fig = mlab.figure(figure=None, bgcolor=(0.4, 0.4, 0.4),
+                              fgcolor=None, engine=None, size=(500, 500))
+            mlab.points3d(p1[:, 0], p1[:, 1], p1[:, 2], p1[:, 1], mode='point',
+                          colormap='gnuplot', scale_factor=1, figure=fig)
+            fig = mlab.figure(figure=None, bgcolor=(0.4, 0.4, 0.4),
+                              fgcolor=None, engine=None, size=(500, 500))
+            mlab.points3d(p1[:, 2], -p1[:, 0], -p1[:, 1], seg, mode='point',
+                          colormap='gnuplot', scale_factor=1, figure=fig)
             raw_input()
 
 def write_2d_rgb_detection(det_filename, split, result_dir):

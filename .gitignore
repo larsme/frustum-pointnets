@@ -32,3 +32,5 @@ kitti/rgb_detections/rgb_detection_val\.txt
 train/detection_results_v1/plot/
 
 train/pretrained/
+
+train/log_v1 \(mit augmentation\)/

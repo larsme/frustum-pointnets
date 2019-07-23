@@ -44,10 +44,12 @@ MODEL = importlib.import_module(FLAGS.model)
 NUM_CLASSES = 2
 NUM_CHANNEL = 4
 
+
 # Load Frustum Datasets.
 TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val',
     rotate_to_center=True, overwritten_data_path=FLAGS.data_path,
     from_rgb_detection=FLAGS.from_rgb_detection, one_hot=True)
+
 
 def get_session_and_ops(batch_size, num_point):
     ''' Define model graph, load model parameters,
@@ -127,8 +129,9 @@ def inference(sess, ops, pc, one_hot_vec, batch_size):
         batch_logits = \
             sess.run([ops['logits']],
                 feed_dict=feed_dict)
+        batch_logits = np.squeeze(batch_logits)
 
-        logits[i*batch_size:(i+1)*batch_size,...] = batch_logits
+        logits[i*batch_size:(i+1)*batch_size, ...] = batch_logits
         # centers[i*batch_size:(i+1)*batch_size,...] = batch_centers
         # heading_logits[i*batch_size:(i+1)*batch_size,...] = batch_heading_scores
         # heading_residuals[i*batch_size:(i+1)*batch_size,...] = batch_heading_residuals
@@ -162,11 +165,11 @@ def inference(sess, ops, pc, one_hot_vec, batch_size):
 #                             heading_cls_list, heading_res_list, \
 #                             size_cls_list, size_res_list, \
 #                             rot_angle_list, score_list):
-def write_detection_results(result_dir, id_list, type_list, score_list):
+def write_detection_results(result_dir, id_list, type_list, box2d_list, score_list):
     ''' Write frustum pointnets results to KITTI format label files. '''
     if result_dir is None: return
     results = {} # map from idx to list of strings, each string is a line (without \n)
-    for i in range(len(center_list)):
+    for i in range(len(score_list)):
         idx = id_list[i]
         output_str = type_list[i] + " -1 -1 -10 "
         box2d = box2d_list[i]
@@ -308,7 +311,22 @@ def test(output_filename, result_dir=None):
     num_batches = len(TEST_DATASET)/batch_size
 
     sess, ops = get_session_and_ops(batch_size=batch_size, num_point=NUM_POINT)
-    correct_cnt = 0
+
+    real_num_classes = 3
+    classes = ['Car', 'Pedestrian', 'Cyclist']
+    epsilon = 1e-12
+
+    # class-level metrics
+    tp_sum = np.zeros(real_num_classes)
+    fn_sum = np.zeros(real_num_classes)
+    fp_sum = np.zeros(real_num_classes)
+    # instance-level metrics
+    iiou_sum = np.zeros(real_num_classes)
+    ire_sum = np.zeros(real_num_classes)
+    ipr_sum = np.zeros(real_num_classes)
+    i_sum = np.zeros(real_num_classes)
+
+
     for batch_idx in range(num_batches):
         print('batch idx: %d' % (batch_idx))
         start_idx = batch_idx * batch_size
@@ -330,7 +348,24 @@ def test(output_filename, result_dir=None):
             inference(sess, ops, batch_data,
                 batch_one_hot_vec, batch_size=batch_size)
 
-        correct_cnt += np.sum(batch_output==batch_label)
+        tps = np.sum(batch_label * batch_output, 1)
+        fns = np.sum(batch_label * (1 - batch_output), 1)
+        fps = np.sum((1- batch_label) * batch_output, 1)
+
+        iiou = tps.astype(np.float) / (tps + fns + fps + epsilon)
+        ipr = tps.astype(np.float) / (tps + fps + epsilon)
+        ire = tps.astype(np.float) / (tps + fns + epsilon)
+
+        for i in range(np.size(tps)):
+            iiou_sum[batch_one_hot_vec[i, :]] += iiou[i]
+            ire_sum[batch_one_hot_vec[i, :]] += ire[i]
+            ipr_sum[batch_one_hot_vec[i, :]] += ipr[i]
+            i_sum[batch_one_hot_vec[i, :]] += 1
+
+            tp_sum[batch_one_hot_vec[i, :]] += tps[i]
+            fn_sum[batch_one_hot_vec[i, :]] += fns[i]
+            fp_sum[batch_one_hot_vec[i, :]] += fps[i]
+
 	
         for i in range(batch_output.shape[0]):
             ps_list.append(batch_data[i,...])
@@ -344,8 +379,28 @@ def test(output_filename, result_dir=None):
             # rot_angle_list.append(batch_rot_angle[i])
             score_list.append(batch_scores[i])
 
-    print("Segmentation accuracy: %f" % \
-        (correct_cnt / float(batch_size*num_batches*NUM_POINT)))
+    ious = tp_sum.astype(np.float)/(tp_sum + fn_sum + fp_sum + epsilon)
+    prs = tp_sum.astype(np.float)/(tp_sum + fp_sum + epsilon)
+    res = tp_sum.astype(np.float)/(tp_sum + fn_sum + epsilon)
+
+    iious = iiou_sum.astype(np.float) / (i_sum + epsilon)
+    iprs = ipr_sum.astype(np.float) / (i_sum + epsilon)
+    ires = ire_sum.astype(np.float) / (i_sum + epsilon)
+
+    print("Segmentation results:")
+    print(classes)
+    print("IOU:")
+    print(ious)
+    print("Precision:")
+    print(prs)
+    print("Recall")
+    print(res)
+    print("instance IOU:")
+    print(iious)
+    print("instance Precision:")
+    print(iprs)
+    print("instance Recall")
+    print(ires)
 
     if FLAGS.dump_result:
         with open(output_filename, 'wp') as fp:
@@ -365,8 +420,8 @@ def test(output_filename, result_dir=None):
     #     TEST_DATASET.type_list, TEST_DATASET.box2d_list, center_list,
     #     heading_cls_list, heading_res_list,
     #     size_cls_list, size_res_list, rot_angle_list, score_list)
-    write_detection_results(result_dir, TEST_DATASET.id_list,
-        TEST_DATASET.type_list, score_list)
+    # write_detection_results(result_dir, TEST_DATASET.id_list,
+    #     TEST_DATASET.type_list, TEST_DATASET.box2d_list, score_list, ious, pr, re)
 
 
 if __name__=='__main__':
