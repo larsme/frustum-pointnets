@@ -15,10 +15,6 @@ models/tf_ops/grouping/query_ball_point
 
 models/tf_ops/grouping/selection_sort
 
-train/log_v1/
-
-train/log_v2/
-
 sunrgbd/sunrgbd_detection/gt_boxes/
 
 mayavi/kitti_sample_scan\.txt
@@ -33,4 +29,4 @@ train/detection_results_v1/plot/
 
 train/pretrained/
 
-train/log_v1 \(mit augmentation\)/
+train/logs

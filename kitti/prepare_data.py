@@ -146,163 +146,163 @@ def random_shift_box2d(box2d, shift_ratio=0.1):
     w2 = w*(1+np.random.random()*2*r-r) # 0.9 to 1.1
     return np.array([cx2-w2/2.0, cy2-h2/2.0, cx2+w2/2.0, cy2+h2/2.0])
  
-def extract_frustum_data(idx_filename, split, output_filename, viz=False,
-                       perturb_box2d=False, augmentX=1, type_whitelist=['Car']):
-    ''' Extract point clouds and corresponding annotations in frustums
-        defined generated from 2D bounding boxes
-        Lidar points and 3d boxes are in *rect camera* coord system
-        (as that in 3d box label files)
-        
-    Input:
-        idx_filename: string, each line of the file is a sample ID
-        split: string, either training or testing
-        output_filename: string, the name for output .pickle file
-        viz: bool, whether to visualize extracted data
-        perturb_box2d: bool, whether to perturb the box2d
-            (used for data augmentation in train set)
-        augmentX: scalar, how many augmentations to have for each 2D box.
-        type_whitelist: a list of strings, object types we are interested in.
-    Output:
-        None (will write a .pickle file to the disk)
-    '''
-    dataset = kitti_object(os.path.join(ROOT_DIR,'./../../data/kitti_object'), split)
-    data_idx_list = [int(line.rstrip()) for line in open(idx_filename)]
+# def extract_frustum_data(idx_filename, split, output_filename, viz=False,
+#                        perturb_box2d=False, augmentX=1, type_whitelist=['Car']):
+#     ''' Extract point clouds and corresponding annotations in frustums
+#         defined generated from 2D bounding boxes
+#         Lidar points and 3d boxes are in *rect camera* coord system
+#         (as that in 3d box label files)
+#
+#     Input:
+#         idx_filename: string, each line of the file is a sample ID
+#         split: string, either training or testing
+#         output_filename: string, the name for output .pickle file
+#         viz: bool, whether to visualize extracted data
+#         perturb_box2d: bool, whether to perturb the box2d
+#             (used for data augmentation in train set)
+#         augmentX: scalar, how many augmentations to have for each 2D box.
+#         type_whitelist: a list of strings, object types we are interested in.
+#     Output:
+#         None (will write a .pickle file to the disk)
+#     '''
+#     dataset = kitti_object(os.path.join(ROOT_DIR,'./../../data/kitti_object'), split)
+#     data_idx_list = [int(line.rstrip()) for line in open(idx_filename)]
+#
+#     id_list = [] # int number
+#     box2d_list = [] # [xmin,ymin,xmax,ymax]
+#     box3d_list = [] # (8,3) array in rect camera coord
+#     input_list = [] # channel number = 4, xyz,intensity in rect camera coord
+#     label_list = [] # 1 for roi object, 0 for clutter
+#     type_list = [] # string e.g. Car
+#     heading_list = [] # ry (along y-axis in rect camera coord) radius of
+#     # (cont.) clockwise angle from positive x axis in velo coord.
+#     box3d_size_list = [] # array of l,w,h
+#     frustum_angle_list = [] # angle of 2d box center from pos x-axis
+#
+#     pos_cnt = 0
+#     all_cnt = 0
+#     for data_idx in data_idx_list:
+#         print('------------- ', data_idx)
+#         calib = dataset.get_calibration(data_idx) # 3 by 4 matrix
+#         objects = dataset.get_label_objects(data_idx)
+#         pc_velo = dataset.get_lidar(data_idx)
+#         pc_rect = np.zeros_like(pc_velo)
+#         pc_rect[:,0:3] = calib.project_velo_to_rect(pc_velo[:,0:3])
+#         pc_rect[:,3] = pc_velo[:,3]
+#         img = dataset.get_image(data_idx)
+#         img_height, img_width, img_channel = img.shape
+#         _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov(pc_velo[:,0:3],
+#             calib, 0, 0, img_width, img_height, True)
+#
+#         for obj_idx in range(len(objects)):
+#             if objects[obj_idx].type not in type_whitelist :continue
+#
+#             # 2D BOX: Get pts rect backprojected
+#             box2d = objects[obj_idx].box2d
+#             for _ in range(augmentX):
+#                 # Augment data by box2d perturbation
+#                 if perturb_box2d:
+#                     xmin,ymin,xmax,ymax = random_shift_box2d(box2d)
+#                     print(box2d)
+#                     print(xmin,ymin,xmax,ymax)
+#                 else:
+#                     xmin,ymin,xmax,ymax = box2d
+#                 box_fov_inds = (pc_image_coord[:,0]<xmax) & \
+#                     (pc_image_coord[:,0]>=xmin) & \
+#                     (pc_image_coord[:,1]<ymax) & \
+#                     (pc_image_coord[:,1]>=ymin)
+#                 box_fov_inds = box_fov_inds & img_fov_inds
+#                 pc_in_box_fov = pc_rect[box_fov_inds,:]
+#                 # Get frustum angle (according to center pixel in 2D BOX)
+#                 box2d_center = np.array([(xmin+xmax)/2.0, (ymin+ymax)/2.0])
+#                 uvdepth = np.zeros((1,3))
+#                 uvdepth[0,0:2] = box2d_center
+#                 uvdepth[0,2] = 20 # some random depth
+#                 box2d_center_rect = calib.project_image_to_rect(uvdepth)
+#                 frustum_angle = -1 * np.arctan2(box2d_center_rect[0,2],
+#                     box2d_center_rect[0,0])
+#                 # 3D BOX: Get pts velo in 3d box
+#                 obj = objects[obj_idx]
+#                 box3d_pts_2d, box3d_pts_3d = utils.compute_box_3d(obj, calib.P)
+#                 _,inds = extract_pc_in_box3d(pc_in_box_fov, box3d_pts_3d)
+#                 label = np.zeros((pc_in_box_fov.shape[0]))
+#                 label[inds] = 1
+#                 # Get 3D BOX heading
+#                 heading_angle = obj.ry
+#                 # Get 3D BOX size
+#                 box3d_size = np.array([obj.l, obj.w, obj.h])
+#
+#                 # Reject too far away object or object without points
+#                 if ymax-ymin<25 or np.sum(label)==0:
+#                     continue
+#
+#                 id_list.append(data_idx)
+#                 box2d_list.append(np.array([xmin,ymin,xmax,ymax]))
+#                 box3d_list.append(box3d_pts_3d)
+#                 input_list.append(pc_in_box_fov)
+#                 label_list.append(label)
+#                 type_list.append(objects[obj_idx].type)
+#                 heading_list.append(heading_angle)
+#                 box3d_size_list.append(box3d_size)
+#                 frustum_angle_list.append(frustum_angle)
+#
+#                 # collect statistics
+#                 pos_cnt += np.sum(label)
+#                 all_cnt += pc_in_box_fov.shape[0]
+#
+#     print('Average pos ratio: %f' % (pos_cnt/float(all_cnt)))
+#     print('Average npoints: %f' % (float(all_cnt)/len(id_list)))
+#
+#     with open(output_filename,'wb') as fp:
+#         pickle.dump(id_list, fp)
+#         pickle.dump(box2d_list,fp)
+#         pickle.dump(box3d_list,fp)
+#         pickle.dump(input_list, fp)
+#         pickle.dump(label_list, fp)
+#         pickle.dump(type_list, fp)
+#         pickle.dump(heading_list, fp)
+#         pickle.dump(box3d_size_list, fp)
+#         pickle.dump(frustum_angle_list, fp)
+#
+#     if viz:
+#         import mayavi.mlab as mlab
+#         for i in range(10):
+#             p1 = input_list[i]
+#             seg = label_list[i]
+#             fig = mlab.figure(figure=None, bgcolor=(0.4,0.4,0.4),
+#                 fgcolor=None, engine=None, size=(500, 500))
+#             mlab.points3d(p1[:,0], p1[:,1], p1[:,2], seg, mode='point',
+#                 colormap='gnuplot', scale_factor=1, figure=fig)
+#             fig = mlab.figure(figure=None, bgcolor=(0.4,0.4,0.4),
+#                 fgcolor=None, engine=None, size=(500, 500))
+#             mlab.points3d(p1[:,2], -p1[:,0], -p1[:,1], seg, mode='point',
+#                 colormap='gnuplot', scale_factor=1, figure=fig)
+#             raw_input()
 
-    id_list = [] # int number
-    box2d_list = [] # [xmin,ymin,xmax,ymax]
-    box3d_list = [] # (8,3) array in rect camera coord
-    input_list = [] # channel number = 4, xyz,intensity in rect camera coord
-    label_list = [] # 1 for roi object, 0 for clutter
-    type_list = [] # string e.g. Car
-    heading_list = [] # ry (along y-axis in rect camera coord) radius of
-    # (cont.) clockwise angle from positive x axis in velo coord.
-    box3d_size_list = [] # array of l,w,h
-    frustum_angle_list = [] # angle of 2d box center from pos x-axis
+# def get_box3d_dim_statistics(idx_filename):
+#     ''' Collect and dump 3D bounding box statistics '''
+#     dataset = kitti_object(os.path.join(ROOT_DIR,'./../../data/kitti_object'))
+#     dimension_list = []
+#     type_list = []
+#     ry_list = []
+#     data_idx_list = [int(line.rstrip()) for line in open(idx_filename)]
+#     for data_idx in data_idx_list:
+#         print('------------- ', data_idx)
+#         calib = dataset.get_calibration(data_idx) # 3 by 4 matrix
+#         objects = dataset.get_label_objects(data_idx)
+#         for obj_idx in range(len(objects)):
+#             obj = objects[obj_idx]
+#             if obj.type=='DontCare':continue
+#             dimension_list.append(np.array([obj.l,obj.w,obj.h]))
+#             type_list.append(obj.type)
+#             ry_list.append(obj.ry)
+#
+#     with open('box3d_dimensions.pickle','wb') as fp:
+#         pickle.dump(type_list, fp)
+#         pickle.dump(dimension_list, fp)
+#         pickle.dump(ry_list, fp)
 
-    pos_cnt = 0
-    all_cnt = 0
-    for data_idx in data_idx_list:
-        print('------------- ', data_idx)
-        calib = dataset.get_calibration(data_idx) # 3 by 4 matrix
-        objects = dataset.get_label_objects(data_idx)
-        pc_velo = dataset.get_lidar(data_idx)
-        pc_rect = np.zeros_like(pc_velo)
-        pc_rect[:,0:3] = calib.project_velo_to_rect(pc_velo[:,0:3])
-        pc_rect[:,3] = pc_velo[:,3]
-        img = dataset.get_image(data_idx)
-        img_height, img_width, img_channel = img.shape
-        _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov(pc_velo[:,0:3],
-            calib, 0, 0, img_width, img_height, True)
-
-        for obj_idx in range(len(objects)):
-            if objects[obj_idx].type not in type_whitelist :continue
-
-            # 2D BOX: Get pts rect backprojected 
-            box2d = objects[obj_idx].box2d
-            for _ in range(augmentX):
-                # Augment data by box2d perturbation
-                if perturb_box2d:
-                    xmin,ymin,xmax,ymax = random_shift_box2d(box2d)
-                    print(box2d)
-                    print(xmin,ymin,xmax,ymax)
-                else:
-                    xmin,ymin,xmax,ymax = box2d
-                box_fov_inds = (pc_image_coord[:,0]<xmax) & \
-                    (pc_image_coord[:,0]>=xmin) & \
-                    (pc_image_coord[:,1]<ymax) & \
-                    (pc_image_coord[:,1]>=ymin)
-                box_fov_inds = box_fov_inds & img_fov_inds
-                pc_in_box_fov = pc_rect[box_fov_inds,:]
-                # Get frustum angle (according to center pixel in 2D BOX)
-                box2d_center = np.array([(xmin+xmax)/2.0, (ymin+ymax)/2.0])
-                uvdepth = np.zeros((1,3))
-                uvdepth[0,0:2] = box2d_center
-                uvdepth[0,2] = 20 # some random depth
-                box2d_center_rect = calib.project_image_to_rect(uvdepth)
-                frustum_angle = -1 * np.arctan2(box2d_center_rect[0,2],
-                    box2d_center_rect[0,0])
-                # 3D BOX: Get pts velo in 3d box
-                obj = objects[obj_idx]
-                box3d_pts_2d, box3d_pts_3d = utils.compute_box_3d(obj, calib.P) 
-                _,inds = extract_pc_in_box3d(pc_in_box_fov, box3d_pts_3d)
-                label = np.zeros((pc_in_box_fov.shape[0]))
-                label[inds] = 1
-                # Get 3D BOX heading
-                heading_angle = obj.ry
-                # Get 3D BOX size
-                box3d_size = np.array([obj.l, obj.w, obj.h])
-
-                # Reject too far away object or object without points
-                if ymax-ymin<25 or np.sum(label)==0:
-                    continue
-
-                id_list.append(data_idx)
-                box2d_list.append(np.array([xmin,ymin,xmax,ymax]))
-                box3d_list.append(box3d_pts_3d)
-                input_list.append(pc_in_box_fov)
-                label_list.append(label)
-                type_list.append(objects[obj_idx].type)
-                heading_list.append(heading_angle)
-                box3d_size_list.append(box3d_size)
-                frustum_angle_list.append(frustum_angle)
-    
-                # collect statistics
-                pos_cnt += np.sum(label)
-                all_cnt += pc_in_box_fov.shape[0]
-        
-    print('Average pos ratio: %f' % (pos_cnt/float(all_cnt)))
-    print('Average npoints: %f' % (float(all_cnt)/len(id_list)))
-    
-    with open(output_filename,'wb') as fp:
-        pickle.dump(id_list, fp)
-        pickle.dump(box2d_list,fp)
-        pickle.dump(box3d_list,fp)
-        pickle.dump(input_list, fp)
-        pickle.dump(label_list, fp)
-        pickle.dump(type_list, fp)
-        pickle.dump(heading_list, fp)
-        pickle.dump(box3d_size_list, fp)
-        pickle.dump(frustum_angle_list, fp)
-    
-    if viz:
-        import mayavi.mlab as mlab
-        for i in range(10):
-            p1 = input_list[i]
-            seg = label_list[i] 
-            fig = mlab.figure(figure=None, bgcolor=(0.4,0.4,0.4),
-                fgcolor=None, engine=None, size=(500, 500))
-            mlab.points3d(p1[:,0], p1[:,1], p1[:,2], seg, mode='point',
-                colormap='gnuplot', scale_factor=1, figure=fig)
-            fig = mlab.figure(figure=None, bgcolor=(0.4,0.4,0.4),
-                fgcolor=None, engine=None, size=(500, 500))
-            mlab.points3d(p1[:,2], -p1[:,0], -p1[:,1], seg, mode='point',
-                colormap='gnuplot', scale_factor=1, figure=fig)
-            raw_input()
-
-def get_box3d_dim_statistics(idx_filename):
-    ''' Collect and dump 3D bounding box statistics '''
-    dataset = kitti_object(os.path.join(ROOT_DIR,'./../../data/kitti_object'))
-    dimension_list = []
-    type_list = []
-    ry_list = []
-    data_idx_list = [int(line.rstrip()) for line in open(idx_filename)]
-    for data_idx in data_idx_list:
-        print('------------- ', data_idx)
-        calib = dataset.get_calibration(data_idx) # 3 by 4 matrix
-        objects = dataset.get_label_objects(data_idx)
-        for obj_idx in range(len(objects)):
-            obj = objects[obj_idx]
-            if obj.type=='DontCare':continue
-            dimension_list.append(np.array([obj.l,obj.w,obj.h])) 
-            type_list.append(obj.type) 
-            ry_list.append(obj.ry)
-
-    with open('box3d_dimensions.pickle','wb') as fp:
-        pickle.dump(type_list, fp)
-        pickle.dump(dimension_list, fp)
-        pickle.dump(ry_list, fp)
-
-def read_det_file(det_filename):
+def read_box_file(det_filename):
     ''' Parse lines in 2D detection output files '''
     det_id2str = {1:'Pedestrian', 2:'Car', 3:'Cyclist'}
     id_list = []
@@ -318,7 +318,113 @@ def read_det_file(det_filename):
     return id_list, type_list, box2d_list, prob_list
 
 
-def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
+# def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
+#                                        viz=False,
+#                                        type_whitelist=['Car'],
+#                                        img_height_threshold=25,
+#                                        lidar_point_threshold=5):
+#     ''' Extract point clouds in frustums extruded from 2D detection boxes.
+#         Update: Lidar points and 3d boxes are in *rect camera* coord system
+#             (as that in 3d box label files)
+#
+#     Input:
+#         det_filename: string, each line is
+#             img_path typeid confidence xmin ymin xmax ymax
+#         split: string, either trianing or testing
+#         output_filename: string, the name for output .pickle file
+#         type_whitelist: a list of strings, object types we are interested in.
+#         img_height_threshold: int, neglect image with height lower than that.
+#         lidar_point_threshold: int, neglect frustum with too few points.
+#     Output:
+#         None (will write a .pickle file to the disk)
+#     '''
+#     dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
+#     det_id_list, det_type_list, det_box2d_list, det_prob_list = \
+#         read_det_file(det_filename)
+#     cache_id = -1
+#     cache = None
+#
+#     id_list = []
+#     type_list = []
+#     box2d_list = []
+#     prob_list = []
+#     input_list = []  # channel number = 4, xyz,intensity in rect camera coord
+#     frustum_angle_list = [] # angle of 2d box center from pos x-axis
+#
+#     for det_idx in range(len(det_id_list)):
+#         data_idx = det_id_list[det_idx]
+#         print('det idx: %d/%d, data idx: %d' % \
+#               (det_idx, len(det_id_list), data_idx))
+#         if cache_id != data_idx:
+#             calib = dataset.get_calibration(data_idx)  # 3 by 4 matrix
+#             pc_velo = dataset.get_lidar(data_idx)
+#             pc_rect = np.zeros_like(pc_velo)
+#             pc_rect[:, 0:3] = calib.project_velo_to_rect(pc_velo[:, 0:3])
+#             pc_rect[:, 3] = pc_velo[:, 3]
+#             img = dataset.get_image(data_idx)
+#             img_height, img_width, img_channel = img.shape
+#             _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov( \
+#                 pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
+#             cache = [calib, pc_rect, pc_image_coord, img_fov_inds]
+#             cache_id = data_idx
+#         else:
+#             calib, pc_rect, pc_image_coord, img_fov_inds = cache
+#
+#         if det_type_list[det_idx] not in type_whitelist: continue
+#
+#         # 2D BOX: Get pts rect backprojected
+#         xmin, ymin, xmax, ymax = det_box2d_list[det_idx]
+#         box_fov_inds = (pc_image_coord[:, 0] < xmax) & \
+#                        (pc_image_coord[:, 0] >= xmin) & \
+#                        (pc_image_coord[:, 1] < ymax) & \
+#                        (pc_image_coord[:, 1] >= ymin)
+#         box_fov_inds = box_fov_inds & img_fov_inds
+#         pc_in_box_fov = pc_rect[box_fov_inds, :]
+#         # Get frustum angle (according to center pixel in 2D BOX)
+#         box2d_center = np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0])
+#         uvdepth = np.zeros((1, 3))
+#         uvdepth[0, 0:2] = box2d_center
+#         uvdepth[0, 2] = 20  # some random depth
+#         box2d_center_rect = calib.project_image_to_rect(uvdepth)
+#         frustum_angle = -1 * np.arctan2(box2d_center_rect[0, 2],
+#                                         box2d_center_rect[0, 0])
+#
+#         # Pass objects that are too small
+#         if ymax - ymin < img_height_threshold or \
+#                 len(pc_in_box_fov) < lidar_point_threshold:
+#             continue
+#
+#         id_list.append(data_idx)
+#         type_list.append(det_type_list[det_idx])
+#         box2d_list.append(det_box2d_list[det_idx])
+#         prob_list.append(det_prob_list[det_idx])
+#         input_list.append(pc_in_box_fov)
+#         frustum_angle_list.append(frustum_angle)
+#
+#     with open(output_filename, 'wb') as fp:
+#         pickle.dump(id_list, fp)
+#         pickle.dump(box2d_list, fp)
+#         pickle.dump(input_list, fp)
+#         pickle.dump(type_list, fp)
+#         pickle.dump(frustum_angle_list, fp)
+#         pickle.dump(prob_list, fp)
+#
+#     if viz:
+#         import mayavi.mlab as mlab
+#         for i in range(10):
+#             p1 = input_list[i]
+#             fig = mlab.figure(figure=None, bgcolor=(0.4, 0.4, 0.4),
+#                               fgcolor=None, engine=None, size=(500, 500))
+#             mlab.points3d(p1[:, 0], p1[:, 1], p1[:, 2], p1[:, 1], mode='point',
+#                           colormap='gnuplot', scale_factor=1, figure=fig)
+#             fig = mlab.figure(figure=None, bgcolor=(0.4, 0.4, 0.4),
+#                               fgcolor=None, engine=None, size=(500, 500))
+#             mlab.points3d(p1[:, 2], -p1[:, 0], -p1[:, 1], seg, mode='point',
+#                           colormap='gnuplot', scale_factor=1, figure=fig)
+#             raw_input()
+
+
+def extract_frustum_data_rgb_detection(box_det_filename, split, output_filename,
                                        viz=False,
                                        type_whitelist=['Car'],
                                        img_height_threshold=25,
@@ -339,47 +445,98 @@ def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
         None (will write a .pickle file to the disk)
     '''
     dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
-    det_id_list, det_type_list, det_box2d_list, det_prob_list = \
-        read_det_file(det_filename)
+
+    # image labels
+    image_pc_label_list = []
+    box_detected_label_list = []
+    for image_idx in range(dataset.num_samples):
+        print('image idx: %d/%d' % \
+              ( image_idx, dataset.num_samples))
+
+        calib = dataset.get_calibration(image_idx)  # 3 by 4 matrix
+
+        pc_velo = dataset.get_lidar(image_idx)
+        pc_rect = np.zeros_like(pc_velo)
+        pc_rect[:, 0:3] = calib.project_velo_to_rect(pc_velo[:, 0:3])
+        pc_rect[:, 3] = pc_velo[:, 3]
+
+        img = dataset.get_image(image_idx)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_height, img_width, img_channel = img.shape
+        _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov( \
+            pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
+        pc_rect = pc_rect[img_fov_inds, :]
+
+        label_objects = dataset.get_label_objects(image_idx)
+        pc_labels = np.zeros((np.size(pc_rect, 0), 1), np.object)
+        for label_object in label_objects:
+            box3d_pts_2d, box3d_pts_3d = utils.compute_box_3d(label_object, calib.P)
+            _, instance_pc_indexes = extract_pc_in_box3d(pc_rect, box3d_pts_3d)
+            overlapping_3d_boxes = np.nonzero(pc_labels[instance_pc_indexes])[0]
+            pc_labels[instance_pc_indexes] = label_object.type
+            (pc_labels[instance_pc_indexes])[overlapping_3d_boxes] = 'DontCare'
+
+        image_pc_label_list.append(pc_labels)
+        box_detected_label_list.append(np.zeros(pc_labels.shape, np.bool_))
+
+    # point cloud
+    det_box_image_index_list, det_box_class_list, det_box_geometry_list, det_box_certainty_list = \
+        read_box_file(box_det_filename)
+
     cache_id = -1
     cache = None
 
-    id_list = []
-    type_list = []
-    box2d_list = []
-    prob_list = []
-    input_list = []  # channel number = 4, xyz,intensity in rect camera coord
-    frustum_angle_list = [] # angle of 2d box center from pos x-axis
+    box_class_list = []
+    box_certainty_list = []
+    pc_in_box_list = []  # channel number = 4, xyz,intensity in rect camera coord
+    frustum_angle_list = []  # angle of 2d box center from pos x-axis
+    pc_in_box_label_list = []
 
-    for det_idx in range(len(det_id_list)):
-        data_idx = det_id_list[det_idx]
-        print('det idx: %d/%d, data idx: %d' % \
-              (det_idx, len(det_id_list), data_idx))
-        if cache_id != data_idx:
-            calib = dataset.get_calibration(data_idx)  # 3 by 4 matrix
-            pc_velo = dataset.get_lidar(data_idx)
+    box_image_id_list = []
+    pc_in_box_inds_list = []
+
+    for box_idx in range(len(det_box_image_index_list)):
+        image_idx = det_box_image_index_list[box_idx]
+        print('box idx: %d/%d, image idx: %d' % \
+              (box_idx, len(det_box_image_index_list), image_idx))
+        if cache_id != image_idx:
+            calib = dataset.get_calibration(image_idx)  # 3 by 4 matrix
+
+            pc_velo = dataset.get_lidar(image_idx)
             pc_rect = np.zeros_like(pc_velo)
             pc_rect[:, 0:3] = calib.project_velo_to_rect(pc_velo[:, 0:3])
             pc_rect[:, 3] = pc_velo[:, 3]
-            img = dataset.get_image(data_idx)
+
+            img = dataset.get_image(image_idx)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_height, img_width, img_channel = img.shape
             _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov( \
                 pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
-            cache = [calib, pc_rect, pc_image_coord, img_fov_inds]
-            cache_id = data_idx
-        else:
-            calib, pc_rect, pc_image_coord, img_fov_inds = cache
+            pc_rect = pc_rect[img_fov_inds, :]
+            pc_image_coord = pc_image_coord[img_fov_inds, :]
+            pc_labels = image_pc_label_list[image_idx]
 
-        if det_type_list[det_idx] not in type_whitelist: continue
+            cache = [calib, pc_rect, pc_image_coord, img, pc_labels]
+            cache_id = image_idx
+        else:
+            calib, pc_rect, pc_image_coord, img, pc_labels = cache
+
+        if det_box_class_list[box_idx] not in type_whitelist:
+            continue
 
         # 2D BOX: Get pts rect backprojected
-        xmin, ymin, xmax, ymax = det_box2d_list[det_idx]
+        xmin, ymin, xmax, ymax = det_box_geometry_list[box_idx]
         box_fov_inds = (pc_image_coord[:, 0] < xmax) & \
                        (pc_image_coord[:, 0] >= xmin) & \
                        (pc_image_coord[:, 1] < ymax) & \
                        (pc_image_coord[:, 1] >= ymin)
-        box_fov_inds = box_fov_inds & img_fov_inds
-        pc_in_box_fov = pc_rect[box_fov_inds, :]
+        pc_in_box_count = np.count_nonzero(box_fov_inds)
+
+        # Pass objects that are too small
+        if ymax - ymin < img_height_threshold or \
+                pc_in_box_count < lidar_point_threshold:
+            continue
+
         # Get frustum angle (according to center pixel in 2D BOX)
         box2d_center = np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0])
         uvdepth = np.zeros((1, 3))
@@ -389,30 +546,52 @@ def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
         frustum_angle = -1 * np.arctan2(box2d_center_rect[0, 2],
                                         box2d_center_rect[0, 0])
 
-        # Pass objects that are too small
-        if ymax - ymin < img_height_threshold or \
-                len(pc_in_box_fov) < lidar_point_threshold:
-            continue
-       
-        id_list.append(data_idx)
-        type_list.append(det_type_list[det_idx])
-        box2d_list.append(det_box2d_list[det_idx])
-        prob_list.append(det_prob_list[det_idx])
-        input_list.append(pc_in_box_fov)
+        pts_2d = np.ndarray.astype(np.round(pc_image_coord[box_fov_inds, :]), int)
+        pts_2d[pts_2d < 0] = 0
+        pts_2d[pts_2d[:, 0] >= img_width, 0] = img_width-1
+        pts_2d[pts_2d[:, 1] >= img_height, 1] = img_height-1
+        pc_in_box_colors = img[pts_2d[:, 1], pts_2d[:, 0], :]
+        pc_in_box = np.concatenate((pc_rect[box_fov_inds, :], pc_in_box_colors), axis=1)
+
+        box_detected_label_list[image_idx][box_fov_inds] = True
+
+        pc_in_box_labels = np.zeros((pc_in_box_count, 1), np.int_)
+        pc_in_box_labels[pc_labels[box_fov_inds] == det_box_class_list[box_idx]] = 1
+        pc_in_box_labels[pc_labels[box_fov_inds] == 'DontCare'] = -1
+
+        box_class_list.append(det_box_class_list[box_idx])
+        box_certainty_list.append(det_box_certainty_list[box_idx])
+        pc_in_box_list.append(pc_in_box)
         frustum_angle_list.append(frustum_angle)
+        pc_in_box_label_list.append(pc_in_box_labels)
+
+        pc_in_box_inds_list.append(box_fov_inds)
+        box_image_id_list.append(image_idx)
+
+    fn = np.zeros((len(type_whitelist)), np.int_)
+    for image_idx in range(dataset.num_samples):
+        undetected_labels = image_pc_label_list[image_idx][np.logical_not(box_detected_label_list[image_idx])]
+        for type_idx in range(len(type_whitelist)):
+            fn += np.count_nonzero(undetected_labels == type_whitelist[type_idx])
 
     with open(output_filename, 'wb') as fp:
-        pickle.dump(id_list, fp)
-        pickle.dump(box2d_list, fp)
-        pickle.dump(input_list, fp)
-        pickle.dump(type_list, fp)
+        # box lists
+        pickle.dump(box_class_list, fp)
+        pickle.dump(box_certainty_list, fp)
+        pickle.dump(pc_in_box_list, fp)
         pickle.dump(frustum_angle_list, fp)
-        pickle.dump(prob_list, fp)
+        pickle.dump(pc_in_box_label_list, fp)
+        pickle.dump(fn, fp)
+        #   for labeled images
+        pickle.dump(box_image_id_list, fp)
+        pickle.dump(pc_in_box_inds_list, fp)
+        pickle.dump(image_pc_label_list, fp)
+
 
     if viz:
         import mayavi.mlab as mlab
         for i in range(10):
-            p1 = input_list[i]
+            p1 = pc_in_box_list[i]
             fig = mlab.figure(figure=None, bgcolor=(0.4, 0.4, 0.4),
                               fgcolor=None, engine=None, size=(500, 500))
             mlab.points3d(p1[:, 0], p1[:, 1], p1[:, 2], p1[:, 1], mode='point',
@@ -422,6 +601,7 @@ def extract_frustum_data_rgb_detection(det_filename, split, output_filename,
             mlab.points3d(p1[:, 2], -p1[:, 0], -p1[:, 1], seg, mode='point',
                           colormap='gnuplot', scale_factor=1, figure=fig)
             raw_input()
+
 
 def write_2d_rgb_detection(det_filename, split, result_dir):
     ''' Write 2D detection results for KITTI evaluation.
@@ -440,7 +620,7 @@ def write_2d_rgb_detection(det_filename, split, result_dir):
     '''
     dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
     det_id_list, det_type_list, det_box2d_list, det_prob_list = \
-        read_det_file(det_filename)
+        read_box_file(det_filename)
     # map from idx to list of strings, each string is a line without \n
     results = {} 
     for i in range(len(det_id_list)):
@@ -467,6 +647,7 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--demo', action='store_true', help='Run demo.')
     parser.add_argument('--gen_train', action='store_true', help='Generate train split frustum data with perturbed GT 2D boxes')
+    parser.add_argument('--gen_train_rgb_detection', action='store_true', help='Generate train split frustum data with RGB detection 2D boxes')
     parser.add_argument('--gen_val', action='store_true', help='Generate val split frustum data with GT 2D boxes')
     parser.add_argument('--gen_val_rgb_detection', action='store_true', help='Generate val split frustum data with RGB detection 2D boxes')
     parser.add_argument('--car_only', action='store_true', help='Only generate cars; otherwise cars, peds and cycs')
@@ -483,21 +664,13 @@ if __name__=='__main__':
         type_whitelist = ['Car', 'Pedestrian', 'Cyclist']
         output_prefix = 'frustum_carpedcyc_'
 
-    if args.gen_train:
-        extract_frustum_data(\
-            os.path.join(BASE_DIR, 'image_sets/train.txt'),
-            'training',
-            os.path.join(BASE_DIR, output_prefix+'train.pickle'), 
-            viz=False, perturb_box2d=True, augmentX=5,
-            type_whitelist=type_whitelist)
-
-    if args.gen_val:
-        extract_frustum_data(\
-            os.path.join(BASE_DIR, 'image_sets/val.txt'),
-            'training',
-            os.path.join(BASE_DIR, output_prefix+'val.pickle'),
-            viz=False, perturb_box2d=False, augmentX=1,
-            type_whitelist=type_whitelist)
+    # if args.gen_val:
+    #     extract_frustum_data(\
+    #         os.path.join(BASE_DIR, 'image_sets/val.txt'),
+    #         'training',
+    #         os.path.join(BASE_DIR, output_prefix+'val.pickle'),
+    #         viz=False, perturb_box2d=False, augmentX=1,
+    #         type_whitelist=type_whitelist)
 
     if args.gen_val_rgb_detection:
         extract_frustum_data_rgb_detection(\
@@ -505,4 +678,20 @@ if __name__=='__main__':
             'training',
             os.path.join(BASE_DIR, output_prefix+'val_rgb_detection.pickle'),
             viz=False,
-            type_whitelist=type_whitelist) 
+            type_whitelist=type_whitelist)
+
+    # if args.gen_train:
+    #     extract_frustum_data(\
+    #         os.path.join(BASE_DIR, 'image_sets/train.txt'),
+    #         'training',
+    #         os.path.join(BASE_DIR, output_prefix+'train.pickle'),
+    #         viz=False, perturb_box2d=True, augmentX=5,
+    #         type_whitelist=type_whitelist)
+
+    if args.gen_train_rgb_detection:
+        extract_frustum_data_rgb_detection(\
+            os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
+            'training',
+            os.path.join(BASE_DIR, output_prefix+'train_rgb_detection.pickle'),
+            viz=False,
+            type_whitelist=type_whitelist)
