@@ -1,4 +1,8 @@
+old false negatives: [4210724 4210724 4210724]
+new false negatives: [104821 104821 104821]
 
+TODO:
+recreate train, val datasets
 
 with ideal 2D boxes
 	200 Epochen gegebenes V1

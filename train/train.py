@@ -60,18 +60,19 @@ NUM_CLASSES = 2 # segmentation net has two classes
 NUM_REAL_CLASSES = 3
 REAL_CLASSES = ['Car', 'Pedestrian', 'Cyclist']
 
-# Load Frustum Datasets. Use default data paths
-print('--- Loading Training Dataset ---')
-TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classes=REAL_CLASSES,
-                                        rotate_to_center=True, random_flip=True, random_shift=False, box_class_one_hot=True,
-                                        from_rgb_detection=True,
-                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity)
 
+
+# Load Frustum Datasets. Use default data paths
+# print('--- Loading Training Dataset ---')
+# TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classes=REAL_CLASSES,
+#                                         rotate_to_center=True, random_flip=True, random_shift=False, box_class_one_hot=True,
+#                                         from_rgb_detection=True,
+#                                         with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity)
 print('--- Loading Testing Dataset ---')
 TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
                                        rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
-                                       with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity)
-
+                                       with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
+                                       segment_all_points=True)
 
 print('--- Loading Model ---')
 MODEL = importlib.import_module(FLAGS.model) # import network module
@@ -83,6 +84,7 @@ os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
 os.system('cp %s %s' % (os.path.join(BASE_DIR, 'train.py'), LOG_DIR))
 LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'w')
 LOG_FOUT.write(str(FLAGS)+'\n')
+
 
 
 BN_INIT_DECAY = 0.5
@@ -198,20 +200,11 @@ def train():
                 #     size_class_label_pl, size_residual_label_pl, end_points)
 
                 # 3D Segmentation loss
-                loss = MODEL.get_loss(batch_gt_labels, pc_pred_logits, tf.to_float(icare), num_labeled_points)
+                loss = MODEL.get_loss(batch_gt_labels, pc_pred_logits, icare)
                 tf.summary.scalar('loss', loss)
                 # losses = tf.get_collection('losses')
                 # total_loss = tf.add_n(losses, name='total_loss')
                 # tf.summary.scalar('total_loss', total_loss)
-
-                # Get training operator
-                learning_rate = get_learning_rate(batch)
-                tf.summary.scalar('learning_rate', learning_rate)
-                if OPTIMIZER == 'momentum':
-                    optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=MOMENTUM)
-                elif OPTIMIZER == 'adam':
-                    optimizer = tf.train.AdamOptimizer(learning_rate)
-                train_op = optimizer.minimize(loss, global_step=batch)
             
             # Add ops to save and restore all the variables.
             saver = tf.train.Saver()
@@ -230,7 +223,8 @@ def train():
         class_writers = []
         for class_idx in range(NUM_REAL_CLASSES):
             class_writers.append(tf.summary.FileWriter(os.path.join(LOG_DIR, REAL_CLASSES[class_idx]), sess.graph))
-        class_writers.append(tf.summary.FileWriter(os.path.join(LOG_DIR, 'Ges'), sess.graph))
+        class_writers.append(tf.summary.FileWriter(os.path.join(LOG_DIR, 'Mean Class'), sess.graph))
+        class_writers.append(tf.summary.FileWriter(os.path.join(LOG_DIR, 'Class Independent'), sess.graph))
 
         # Init variables
         if FLAGS.restore_model_path is None:
@@ -263,21 +257,21 @@ def train():
                'pc_pred_logits': pc_pred_logits,
                # 'centers_pred': end_points['center'],
                'loss': loss,
-               'train_op': train_op,
                'merged': merged,
                'step': batch}
 
-        for epoch in range(MAX_EPOCH):
-            log_string('**** EPOCH %03d ****' % (epoch))
-            sys.stdout.flush()
-             
-            train_one_epoch(sess, ops, train_writer)
-            eval_one_epoch(sess, ops, test_writer, class_writers)
-
-            # Save the variables to disk.
-            if epoch % 10 == 0:
-                save_path = saver.save(sess, os.path.join(LOG_DIR, "model.ckpt"))
-                log_string("Model saved in file: %s" % save_path)
+        eval_one_epoch(sess, ops, test_writer, class_writers)
+        # for epoch in range(MAX_EPOCH):
+        #     log_string('**** EPOCH %03d ****' % (epoch))
+        #     sys.stdout.flush()
+        #
+        #     train_one_epoch(sess, ops, train_writer)
+        #     eval_one_epoch(sess, ops, test_writer, class_writers)
+        #
+        #     # Save the variables to disk.
+        #     if epoch % 10 == 0:
+        #         save_path = saver.save(sess, os.path.join(LOG_DIR, "model.ckpt"))
+        #         log_string("Model saved in file: %s" % save_path)
 
 
 def train_one_epoch(sess, ops, train_writer):
@@ -304,7 +298,8 @@ def train_one_epoch(sess, ops, train_writer):
     # Training with batches
     for batch_idx in range(num_batches):
         start_idx = batch_idx * BATCH_SIZE
-        end_idx = (batch_idx+1) * BATCH_SIZE
+        end_idx = min(start_idx+BATCH_SIZE, len(train_idxs))
+        idxs = train_idxs[start_idx:(end_idx + 1)]
 
         # batch_data, batch_label, batch_center, \
         # batch_hclass, batch_hres, \
@@ -312,8 +307,8 @@ def train_one_epoch(sess, ops, train_writer):
         # batch_rot_angle, batch_one_hot_vec = \
         #     get_batch(TRAIN_DATASET, train_idxs, start_idx, end_idx,
         #         NUM_POINT, NUM_CHANNEL)
-        batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, batch_one_hot_vec = \
-            get_batch(TRAIN_DATASET, train_idxs, start_idx, end_idx, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES)
+        batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, _, batch_one_hot_vec = \
+            get_batch(TRAIN_DATASET, BATCH_SIZE, idxs, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES)
 
         # feed_dict = {ops['pointclouds_pl']: batch_data,
         #              ops['one_hot_vec_pl']: batch_one_hot_vec,
@@ -330,15 +325,24 @@ def train_one_epoch(sess, ops, train_writer):
                      ops['batch_one_hot_vec']: batch_one_hot_vec,
                      ops['is_training_pl']: is_training}
 
-        # summary, step, _, loss_val, pc_pred_logits, centers_pred_val, \
+        # summary, step, _, loss, pc_pred_logits, centers_pred_val, \
         # iou2ds, iou3ds = \
         #     sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'],
         #         ops['logits'], ops['centers_pred'],
         #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
         #         feed_dict=feed_dict)
-        summary, step, _, loss_val, pc_pred_logits = \
-            sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'], ops['pc_pred_logits']],
+        summary, step, loss, pc_pred_logits = \
+            sess.run([ops['merged'], ops['step'], ops['batch'], ops['loss'], ops['pc_pred_logits']],
                      feed_dict=feed_dict)
+
+        with tf.variable_scope("learning"):
+            learning_rate = get_learning_rate(step)
+            tf.summary.scalar('learning_rate', learning_rate)
+            if OPTIMIZER == 'momentum':
+                optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=MOMENTUM)
+            elif OPTIMIZER == 'adam':
+                optimizer = tf.train.AdamOptimizer(learning_rate)
+            train_op = optimizer.minimize(loss, global_step=step)
 
         train_writer.add_summary(summary, step)
 
@@ -346,7 +350,7 @@ def train_one_epoch(sess, ops, train_writer):
         correct = np.sum(pc_pred_labels_val == batch_gt_labels)
         total_correct += correct
         total_seen += (BATCH_SIZE*NUM_POINT)
-        loss_sum += loss_val
+        loss_sum += loss
         # iou2ds_sum += np.sum(iou2ds)
         # iou3ds_sum += np.sum(iou3ds)
         # iou3d_correct_cnt += np.sum(iou3ds>=0.7)
@@ -376,8 +380,6 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
     is_training = False
     log_string(str(datetime.now()))
     log_string('---- EPOCH %03d EVALUATION ----' % EPOCH_CNT)
-    test_idxs = np.arange(0, len(TEST_DATASET))
-    num_batches = len(TEST_DATASET)/BATCH_SIZE
 
     # To collect statistics
     total_correct = 0
@@ -392,86 +394,116 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
     tp_sum = np.zeros(NUM_REAL_CLASSES)
     box_fn_sum = np.zeros(NUM_REAL_CLASSES)
     fp_sum = np.zeros(NUM_REAL_CLASSES)
+    tn_sum = np.zeros(NUM_REAL_CLASSES)
 
     # box instance-level metrics
     iiou_sum = np.zeros(NUM_REAL_CLASSES)
     ire_sum = np.zeros(NUM_REAL_CLASSES)
     ipr_sum = np.zeros(NUM_REAL_CLASSES)
     i_sum = np.zeros(NUM_REAL_CLASSES)
-   
-    # Simple evaluation with batches 
-    for batch_idx in range(num_batches):
-        start_idx = batch_idx * BATCH_SIZE
-        end_idx = (batch_idx+1) * BATCH_SIZE
 
-        # batch_data, batch_label, batch_center, \
-        # batch_hclass, batch_hres, \
-        # batch_sclass, batch_sres, \
-        # batch_rot_angle, batch_one_hot_vec = \
-        #     get_batch(TEST_DATASET, test_idxs, start_idx, end_idx,
-        #         NUM_POINT, NUM_CHANNEL)
-        batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, batch_one_hot_vec = \
-            get_batch(TEST_DATASET, test_idxs, start_idx, end_idx, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES)
+    epoch_boxes_left_to_sample = []
+    epoch_boxes_points_idxs_left_to_sample = []
+    for i in np.arange(0, len(TEST_DATASET)):
+        epoch_boxes_left_to_sample.append(i)
+        epoch_boxes_points_idxs_left_to_sample.append(range(np.size(TEST_DATASET.pc_in_box_list[i], 0)))
 
-        # feed_dict = {ops['pointclouds_pl']: batch_data,
-        #              ops['one_hot_vec_pl']: batch_one_hot_vec,
-        #              ops['labels_pl']: batch_label,
-        #              ops['centers_pl']: batch_center,
-        #              ops['heading_class_label_pl']: batch_hclass,
-        #              ops['heading_residual_label_pl']: batch_hres,
-        #              ops['size_class_label_pl']: batch_sclass,
-        #              ops['size_residual_label_pl']: batch_sres,
-        #              ops['is_training_pl']: is_training}
-        feed_dict = {ops['batch_input_pc']: batch_input_pc,
-                     ops['batch_box_certainty']: batch_box_certainty,
-                     ops['batch_gt_labels']: batch_gt_labels,
-                     ops['batch_one_hot_vec']: batch_one_hot_vec,
-                     ops['is_training_pl']: is_training}
+    while len(epoch_boxes_left_to_sample) > 0:
+        new_epoch_boxes_left_to_sample = []
+        new_epoch_boxes_points_idxs_left_to_sample = []
 
-        # summary, step, loss_val, logits_val, iou2ds, iou3ds = \
-        #     sess.run([ops['merged'], ops['step'],
-        #         ops['loss'], ops['logits'],
-        #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
-        #         feed_dict=feed_dict)
-        summary, step, _, loss_val, pc_pred_logits = \
-            sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'], ops['pc_pred_logits']],
-                     feed_dict=feed_dict)
+        num_batches = int(np.ceil(len(epoch_boxes_left_to_sample) * 1.0 / BATCH_SIZE))
+        new_epoch_boxes_left_to_sample = []
+        new_epoch_boxes_points_idxs_left_to_sample = []
+        print(num_batches)
 
-        test_writer.add_summary(summary, step)
+        # Simple evaluation with batches
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * BATCH_SIZE
+            end_idx = min(start_idx+BATCH_SIZE, len(epoch_boxes_left_to_sample))
 
-        pc_pred_labels = np.argmax(pc_pred_logits, 2)
-        correct = np.sum(pc_pred_labels == batch_gt_labels)
-        total_correct += correct
-        total_seen += (BATCH_SIZE*NUM_POINT)
-        loss_sum += loss_val
-        for l in range(NUM_CLASSES):
-            total_seen_class[l] += np.sum(batch_gt_labels == l)
-            total_correct_class[l] += (np.sum((pc_pred_labels == l) & (batch_gt_labels == l)))
+            batch_box_idxs = epoch_boxes_left_to_sample[start_idx:end_idx]
+            batch_box_points_left_to_sample = epoch_boxes_points_idxs_left_to_sample[start_idx:end_idx]
 
-        icare = batch_gt_labels != -1
+            # batch_data, batch_label, batch_center, \
+            # batch_hclass, batch_hres, \
+            # batch_sclass, batch_sres, \
+            # batch_rot_angle, batch_one_hot_vec = \
+            #     get_batch(TEST_DATASET, test_idxs, start_idx, end_idx,
+            #         NUM_POINT, NUM_CHANNEL)
+            batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, \
+                new_batch_box_points_left_to_sample, batch_one_hot_vec = \
+                get_batch(TEST_DATASET, BATCH_SIZE, batch_box_idxs, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES,
+                          batch_box_points_left_to_sample)
+            for i in range(len(batch_box_idxs)):
+                if len(new_batch_box_points_left_to_sample[i]) > 0:
+                    new_epoch_boxes_left_to_sample.append(batch_box_idxs[i])
+                    new_epoch_boxes_points_idxs_left_to_sample.append(new_batch_box_points_left_to_sample[i])
 
-        tps = np.sum(batch_gt_labels * pc_pred_labels * icare, 1)
-        fns = np.sum(batch_gt_labels * (1 - pc_pred_labels * icare), 1)
-        fps = np.sum((1- batch_gt_labels) * pc_pred_labels * icare, 1)
+            # feed_dict = {ops['pointclouds_pl']: batch_data,
+            #              ops['one_hot_vec_pl']: batch_one_hot_vec,
+            #              ops['labels_pl']: batch_label,
+            #              ops['centers_pl']: batch_center,
+            #              ops['heading_class_label_pl']: batch_hclass,
+            #              ops['heading_residual_label_pl']: batch_hres,
+            #              ops['size_class_label_pl']: batch_sclass,
+            #              ops['size_residual_label_pl']: batch_sres,
+            #              ops['is_training_pl']: is_training}
+            feed_dict = {ops['batch_input_pc']: batch_input_pc,
+                         ops['batch_box_certainty']: batch_box_certainty,
+                         ops['batch_gt_labels']: batch_gt_labels,
+                         ops['batch_one_hot_vec']: batch_one_hot_vec,
+                         ops['is_training_pl']: is_training}
 
-        iiou = tps.astype(np.float) / (tps + fns + fps + epsilon)
-        ipr = tps.astype(np.float) / (tps + fps + epsilon)
-        ire = tps.astype(np.float) / (tps + fns + epsilon)
+            # summary, step, loss_val, logits_val, iou2ds, iou3ds = \
+            #     sess.run([ops['merged'], ops['step'],
+            #         ops['loss'], ops['logits'],
+            #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
+            #         feed_dict=feed_dict)
+            summary, step, loss_val, pc_pred_logits = \
+                sess.run([ops['merged'], ops['step'], ops['loss'], ops['pc_pred_logits']],
+                         feed_dict=feed_dict)
 
-        for i in range(BATCH_SIZE):
-            iiou_sum[batch_one_hot_vec[i, :]] += iiou[i]
-            ire_sum[batch_one_hot_vec[i, :]] += ire[i]
-            ipr_sum[batch_one_hot_vec[i, :]] += ipr[i]
-            i_sum[batch_one_hot_vec[i, :]] += 1
+            test_writer.add_summary(summary, step)
 
-            tp_sum[batch_one_hot_vec[i, :]] += tps[i]
-            box_fn_sum[batch_one_hot_vec[i, :]] += fns[i]
-            fp_sum[batch_one_hot_vec[i, :]] += fps[i]
+            pc_pred_labels = np.argmax(pc_pred_logits, 2)
+            loss_sum += loss_val
+            for l in range(NUM_CLASSES):
+                total_seen_class[l] += np.sum(batch_gt_labels == l)
+                total_correct_class[l] += (np.sum((pc_pred_labels == l) & (batch_gt_labels == l)))
 
-    log_string('eval mean loss: %f' % (loss_sum / float(num_batches)))
-    log_string('eval segmentation accuracy: %f'% (total_correct / float(total_seen)))
-    log_string('eval segmentation avg class acc: %f' % \
-               (np.mean(np.array(total_correct_class) / np.array(total_seen_class, dtype=np.float))))
+            icare = batch_gt_labels != -1
+
+            tps = np.sum(batch_gt_labels * pc_pred_labels * icare, 1)
+            fns = np.sum(batch_gt_labels * (1 - pc_pred_labels) * icare, 1)
+            fps = np.sum((1 - batch_gt_labels) * pc_pred_labels * icare, 1)
+            tns = np.sum((1 - batch_gt_labels) * (1 - pc_pred_labels) * icare, 1)
+
+            iiou = tps.astype(np.float) / (tps + fns + fps + epsilon)
+            ipr = tps.astype(np.float) / (tps + fps + epsilon)
+            ire = tps.astype(np.float) / (tps + fns + epsilon)
+
+            for i in range(end_idx - start_idx):
+                point_percentage = np.sum(icare[i, :]) * 1.0 \
+                                   / len(TEST_DATASET.pc_in_box_label_list[batch_box_idxs[i]])
+                iiou_sum[batch_one_hot_vec[i, :]] += point_percentage * iiou[i]
+                ire_sum[batch_one_hot_vec[i, :]] += point_percentage * ire[i]
+                ipr_sum[batch_one_hot_vec[i, :]] += point_percentage * ipr[i]
+                i_sum[batch_one_hot_vec[i, :]] += point_percentage
+
+                tp_sum[batch_one_hot_vec[i, :]] += tps[i]
+                box_fn_sum[batch_one_hot_vec[i, :]] += fns[i]
+                fp_sum[batch_one_hot_vec[i, :]] += fps[i]
+                tn_sum[batch_one_hot_vec[i, :]] += tns[i]
+
+        epoch_boxes_points_idxs_left_to_sample = new_epoch_boxes_points_idxs_left_to_sample
+        epoch_boxes_left_to_sample = new_epoch_boxes_left_to_sample
+
+    log_string('eval mean loss: %f' % (loss_sum / np.sum(i_sum)))
+    log_string('eval segmentation accuracy: %f'% (float(np.sum(tp_sum+tn_sum))
+               /(float(np.sum(tp_sum + box_fn_sum + fp_sum + tn_sum)) + epsilon)))
+    log_string('eval segmentation avg class acc: %f'% np.mean((tp_sum+tn_sum).astype(np.float)
+                                                              / (tp_sum + box_fn_sum + fp_sum + tn_sum + epsilon)))
     # log_string('eval box IoU (ground/3D): %f / %f' % \
     #     (iou2ds_sum / float(num_batches*BATCH_SIZE), iou3ds_sum / \
     #         float(num_batches*BATCH_SIZE)))
@@ -482,15 +514,28 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
     box_prs = tp_sum.astype(np.float)/(tp_sum + fp_sum + epsilon)
     box_res = tp_sum.astype(np.float)/(tp_sum + box_fn_sum + epsilon)
 
+    box_any_ious = np.sum(tp_sum).astype(np.float)/(np.sum(tp_sum + box_fn_sum + fp_sum) + epsilon)
+    box_any_prs = np.sum(tp_sum).astype(np.float)/(np.sum(tp_sum + fp_sum) + epsilon)
+    box_any_res = np.sum(tp_sum).astype(np.float)/(np.sum(tp_sum + box_fn_sum) + epsilon)
+
     iious = iiou_sum.astype(np.float) / (i_sum + epsilon)
     iprs = ipr_sum.astype(np.float) / (i_sum + epsilon)
     ires = ire_sum.astype(np.float) / (i_sum + epsilon)
+
+    iious_any = np.sum(iiou_sum).astype(np.float) / (np.sum(i_sum) + epsilon)
+    iprs_any = np.sum(ipr_sum).astype(np.float) / (np.sum(i_sum) + epsilon)
+    ires_any = np.sum(ire_sum).astype(np.float) / (np.sum(i_sum) + epsilon)
 
     # image class-level metrics
     image_fn_sum = box_fn_sum + TEST_DATASET.image_boxes_fn
     image_ious = tp_sum.astype(np.float)/(tp_sum + image_fn_sum + fp_sum + epsilon)
     image_prs = box_prs
     image_res = tp_sum.astype(np.float)/(tp_sum + image_fn_sum + epsilon)
+
+    image_any_fn_sum = box_fn_sum + TEST_DATASET.image_boxes_fn
+    image_any_ious = np.sum(tp_sum).astype(np.float)/(np.sum(tp_sum + image_fn_sum + fp_sum) + epsilon)
+    image_any_prs = box_any_prs
+    image_any_res = np.sum(tp_sum).astype(np.float)/(np.sum(tp_sum + image_fn_sum) + epsilon)
 
     for class_idx in range(NUM_REAL_CLASSES):
         summary = tf.Summary()
@@ -509,13 +554,25 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
     summary.value.add(tag='Box_IOU', simple_value=np.mean(box_ious))
     summary.value.add(tag='Box_Precision', simple_value=np.mean(box_prs))
     summary.value.add(tag='Box_Recall', simple_value=np.mean(box_res))
-    summary.value.add(tag='Box_iIOU', simple_value=np.mean(iiou))
+    summary.value.add(tag='Box_iIOU', simple_value=np.mean(iious))
     summary.value.add(tag='Box_iPrecision', simple_value=np.mean(iprs))
     summary.value.add(tag='Box_iRecall', simple_value=np.mean(ires))
     summary.value.add(tag='Image_IOU', simple_value=np.mean(image_ious))
     summary.value.add(tag='Image_Precision', simple_value=np.mean(image_prs))
     summary.value.add(tag='Image_Recall', simple_value=np.mean(image_res))
     class_writers[NUM_REAL_CLASSES].add_summary(summary, EPOCH_CNT)
+
+    summary = tf.Summary()
+    summary.value.add(tag='Box_IOU', simple_value=np.mean(box_any_ious))
+    summary.value.add(tag='Box_Precision', simple_value=np.mean(box_any_prs))
+    summary.value.add(tag='Box_Recall', simple_value=np.mean(box_any_res))
+    summary.value.add(tag='Box_iIOU', simple_value=np.mean(iious_any))
+    summary.value.add(tag='Box_iPrecision', simple_value=np.mean(iprs_any))
+    summary.value.add(tag='Box_iRecall', simple_value=np.mean(ires_any))
+    summary.value.add(tag='Image_IOU', simple_value=np.mean(image_any_ious))
+    summary.value.add(tag='Image_Precision', simple_value=np.mean(image_any_prs))
+    summary.value.add(tag='Image_Recall', simple_value=np.mean(image_any_res))
+    class_writers[NUM_REAL_CLASSES+1].add_summary(summary, EPOCH_CNT)
 
     EPOCH_CNT += 1
 

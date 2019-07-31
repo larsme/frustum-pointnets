@@ -7,25 +7,25 @@ Date: September 2017
 import numpy as np
 
 
-def get_batch(dataset, idxs, start_idx, end_idx,
-              num_point, num_channel, num_real_classes):
-    ''' Prepare batch data for training/evaluation.
-    batch size is determined by start_idx-end_idx
-
-    Input:
-        dataset: an instance of FrustumDataset class
-        idxs: a list of data element indices
-        start_idx: int scalar, start position in idxs
-        end_idx: int scalar, end position in idxs
-        num_point: int scalar
-        num_channel: int scalar
-        from_rgb_detection: bool
-    Output:
-        batched data and label
-    '''
-    if dataset.from_rgb_detection:
-        return get_batch_from_rgb_detection(dataset, idxs, start_idx, end_idx,
-                                            num_point, num_channel, num_real_classes)
+# def get_batch(dataset, batch_box_idxs, start_idx, end_idx,
+#               num_point, num_channel, num_real_classes, segment_all_points=False):
+#     ''' Prepare batch data for training/evaluation.
+#     batch size is determined by start_idx-end_idx
+#
+#     Input:
+#         dataset: an instance of FrustumDataset class
+#         batch_box_idxs: a list of data element indices
+#         start_idx: int scalar, start position in batch_box_idxs
+#         end_idx: int scalar, end position in batch_box_idxs
+#         num_point: int scalar
+#         num_channel: int scalar
+#         from_rgb_detection: bool
+#     Output:
+#         batched data and label
+#     '''
+    # if dataset.from_rgb_detection:
+    #     return get_batch_from_rgb_detection(dataset, batch_box_idxs, start_idx, end_idx,
+    #                                         num_point, num_channel, num_real_classes, segment_all_points)
 
     # bsize = end_idx-start_idx
     # batch_input_pc = np.zeros((bsize, num_point, num_channel))
@@ -41,11 +41,11 @@ def get_batch(dataset, idxs, start_idx, end_idx,
     # for i in range(bsize):
     #     if dataset.box_class_one_hot:
     #         ps, seg, center, hclass, hres, sclass, sres, rotangle, onehotvec = \
-    #             dataset[idxs[i+start_idx]]
+    #             dataset[batch_box_idxs[i+start_idx]]
     #         batch_one_hot_vec[i] = onehotvec
     #     else:
     #         ps, seg, center, hclass, hres, sclass, sres, rotangle = \
-    #             dataset[idxs[i+start_idx]]
+    #             dataset[batch_box_idxs[i+start_idx]]
     #     batch_input_pc[i, ...] = ps[:,0:num_channel]
     #     batch_gt_labels[i, :] = seg
     #     # batch_center[i,:] = center
@@ -69,7 +69,7 @@ def get_batch(dataset, idxs, start_idx, end_idx,
     #     return batch_input_pc, batch_gt_labels, batch_rot_angle
 
 
-# def get_batch_from_rgb_detection(dataset, idxs, start_idx, end_idx,
+# def get_batch_from_rgb_detection(dataset, batch_box_idxs, start_idx, end_idx,
 #                                  num_point, num_channel):
 #     bsize = end_idx-start_idx
 #     batch_data = np.zeros((bsize, num_point, num_channel))
@@ -79,10 +79,10 @@ def get_batch(dataset, idxs, start_idx, end_idx,
 #         batch_one_hot_vec = np.zeros((bsize,3)) # for car,ped,cyc
 #     for i in range(bsize):
 #         if dataset.one_hot:
-#             ps,rotangle,prob,onehotvec = dataset[idxs[i+start_idx]]
+#             ps,rotangle,prob,onehotvec = dataset[batch_box_idxs[i+start_idx]]
 #             batch_one_hot_vec[i] = onehotvec
 #         else:
-#             ps,rotangle,prob = dataset[idxs[i+start_idx]]
+#             ps,rotangle,prob = dataset[batch_box_idxs[i+start_idx]]
 #         batch_data[i,...] = ps[:,0:num_channel]
 #         batch_rot_angle[i] = rotangle
 #         batch_prob[i] = prob
@@ -92,23 +92,49 @@ def get_batch(dataset, idxs, start_idx, end_idx,
 #         return batch_data, batch_rot_angle, batch_prob
 
 
-def get_batch_from_rgb_detection(dataset, idxs, start_idx, end_idx, num_point, num_channel, num_real_classes):
-    bsize = end_idx-start_idx
-    batch_input_pc = np.zeros((bsize, num_point, num_channel))
-    batch_gt_labels = np.zeros((bsize, num_point))
-    batch_rot_angle = np.zeros((bsize,))
-    batch_box_certainty = np.zeros((bsize,))
+def get_batch(dataset, fixed_batch_size, batch_box_idxs, num_point, num_channel, num_real_classes, batch_box_points_left_to_sample=[]):
+    ''' Prepare batch data for training/evaluation.
+    batch size is determined by start_idx-end_idx
+
+    Input:
+        dataset: an instance of FrustumDataset class
+        fixed_batch_size: fixed dimension of outputs
+        batch_box_idxs: a list of data element indices
+        num_point: int scalar
+        num_channel: int scalar
+        from_rgb_detection: bool
+    Output:
+        batched data and label
+    '''
+    real_batch_size = len(batch_box_idxs)
+    batch_input_pc = np.zeros((fixed_batch_size, num_point, num_channel))
+    batch_gt_labels = np.zeros((fixed_batch_size, num_point))
+    batch_rot_angle = np.zeros((fixed_batch_size,))
+    batch_box_certainty = np.zeros((fixed_batch_size,))
+    if len(batch_box_points_left_to_sample) == 0:
+        for i in range(real_batch_size):
+            batch_box_points_left_to_sample.append([])
+    new_batch_box_points_left_to_sample = []
     if dataset.box_class_one_hot:
-        batch_one_hot_vec = np.zeros((bsize, num_real_classes), np.bool_) # for car,ped,cyc
-        for i in range(bsize):
+        batch_one_hot_vec = np.zeros((fixed_batch_size, num_real_classes), np.bool_) # for car,ped,cyc
+        for i in range(real_batch_size):
             batch_input_pc[i, ...], batch_gt_labels[i, ...], batch_rot_angle[i], \
-                batch_box_certainty[i], batch_one_hot_vec[i, ...] \
-                = dataset[idxs[i + start_idx]]
-        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, batch_one_hot_vec
+                batch_box_certainty[i], new_box_points_left_to_sample, batch_one_hot_vec[i, ...] \
+                = dataset[batch_box_idxs[i], batch_box_points_left_to_sample[i]]
+            new_batch_box_points_left_to_sample.append(new_box_points_left_to_sample)
+        for i in range(real_batch_size, fixed_batch_size):
+            new_batch_box_points_left_to_sample.append([])
+
+        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, new_batch_box_points_left_to_sample, \
+               batch_one_hot_vec
     else:
-        for i in range(bsize):
-            batch_input_pc[i, ...], batch_gt_labels[i, ...], batch_rot_angle[i], batch_box_certainty[i] \
-                = dataset[idxs[i + start_idx]]
-        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty
+        for i in range(real_batch_size):
+            batch_input_pc[i, ...], batch_gt_labels[i, ...], batch_rot_angle[i], batch_box_certainty[i],\
+                new_box_points_left_to_sample \
+                = dataset[batch_box_idxs[i], batch_box_points_left_to_sample[i]]
+            new_batch_box_points_left_to_sample.append(new_box_points_left_to_sample)
+        for i in range(real_batch_size, fixed_batch_size):
+            new_batch_box_points_left_to_sample.append([])
+        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, new_batch_box_points_left_to_sample
 
 

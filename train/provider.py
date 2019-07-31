@@ -103,7 +103,8 @@ class FrustumDataset(object):
     def __init__(self, npoints, split, classes,
                  random_flip=False, random_shift=False, rotate_to_center=False,
                  overwritten_data_path=None, from_rgb_detection=False, box_class_one_hot=False,
-                 with_intensity=True, with_color=True, vizualize_labled_images=False):
+                 with_intensity=True, with_color=True, vizualize_labled_images=False,
+                 segment_all_points=False):
         '''
         Input:
             npoints: int scalar, number of points for frustum point cloud.
@@ -126,6 +127,7 @@ class FrustumDataset(object):
         self.random_shift = random_shift
         self.rotate_to_center = rotate_to_center
         self.box_class_one_hot = box_class_one_hot
+        self.segment_all_points = segment_all_points
 
         if overwritten_data_path is None:
             if from_rgb_detection:
@@ -200,9 +202,10 @@ class FrustumDataset(object):
     def __len__(self):
         return len(self.frustum_angle_list)
 
-    def __getitem__(self, box_index):
+    def __getitem__(self, opts):
         ''' Get box_index-th element from the picked file dataset. '''
         # ------------------------------ INPUTS ----------------------------
+        box_index, left_to_sample = opts
         rot_angle = self.get_center_view_rot_angle(box_index)
 
         # Compute one hot vector
@@ -217,8 +220,29 @@ class FrustumDataset(object):
             input_pc = self.get_center_view_point_set(box_index)
         else:
             input_pc = self.pc_in_box_list[box_index]
+
         # Resample
-        choice = np.random.choice(input_pc.shape[0], self.npoints, replace=True)
+        if self.segment_all_points:
+            if len(left_to_sample) < self.npoints:
+                choice = np.zeros(self.npoints, np.int_)
+                choice[0:len(left_to_sample)] = left_to_sample
+                choice[len(left_to_sample):self.npoints] = np.random.choice(input_pc.shape[0],
+                                                                            self.npoints-len(left_to_sample),
+                                                                            replace=True)
+                idontcare = np.zeros(self.npoints, np.bool_)
+                idontcare[len(left_to_sample):self.npoints] = True
+                permut = np.random.permutation(range(self.npoints))
+                choice = choice[permut]
+                idontcare = idontcare[permut]
+                left_to_sample = []
+            else:
+                choice = np.random.permutation(left_to_sample)
+                left_to_sample = choice[self.npoints:]
+                choice = choice[:self.npoints]
+                idontcare = np.zeros(self.npoints, np.bool_)
+        else:
+            choice = np.random.choice(input_pc.shape[0], self.npoints, replace=True)
+            idontcare = np.zeros(self.npoints, np.bool_)
         input_pc = input_pc[choice, :]
 
         # if self.from_rgb_detection:
@@ -229,6 +253,7 @@ class FrustumDataset(object):
 
         # ------------------------------ LABELS ----------------------------
         pc_in_box_gt_labels = np.squeeze(self.pc_in_box_label_list[box_index][choice])
+        pc_in_box_gt_labels[idontcare] = -1
 
         # # Get center point of 3D box
         # if self.rotate_to_center:
@@ -251,7 +276,7 @@ class FrustumDataset(object):
             # note: rot_angle won't be correct if we have random_flip
             # so do not use it in case of random flipping.
             if np.random.random()>0.5: # 50% chance flipping
-                input_pc[:,0] *= -1
+                input_pc[:, 0] *= -1
                 # box3d_center[0] *= -1
                 # heading_angle = np.pi - heading_angle
         if self.random_shift:
@@ -273,9 +298,11 @@ class FrustumDataset(object):
 
         if self.from_rgb_detection:
             if self.box_class_one_hot:
-                return input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index], box_class_one_hot_vec
+                return input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index], \
+                       left_to_sample, box_class_one_hot_vec
             else:
-                return input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index]
+                return input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index], \
+                       left_to_sample
 
     def show_points_per_box_statistics(self):
         import matplotlib.pyplot as plt

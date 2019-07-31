@@ -423,12 +423,78 @@ def read_box_file(det_filename):
 #                           colormap='gnuplot', scale_factor=1, figure=fig)
 #             raw_input()
 
+def show_points_per_box_statistics(split_file_datapath,
+                     split,
+                     train_split,
+                     type_whitelist=['Car'],
+                     from_rgb_detection=True,
+                     rgb_det_filename="",
+                     img_height_threshold=25):
 
-def extract_frustum_data_rgb_detection(box_det_filename, split, output_filename,
-                                       viz=False,
-                                       type_whitelist=['Car'],
-                                       img_height_threshold=25,
-                                       lidar_point_threshold=5):
+    image_idx_list = [int(line.rstrip()) for line in open(split_file_datapath)]
+    dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
+
+    points_per_box = []
+    ges_points_per_box = []
+    for i in range(len(type_whitelist)):
+        points_per_box.append([])
+
+    if not from_rgb_detection:
+        for image_idx in image_idx_list:
+            label_objects = dataset.get_label_objects(image_idx)
+            for label_object in label_objects:
+                for i in range(len(type_whitelist)):
+                    if type_whitelist[i] == label_object.type:
+                        xmin, ymin, xmax, ymax = label_object.box2d
+                        if ymax - ymin >= img_height_threshold:
+                            points_per_box[i].append((xmax-xmin)*(ymax-ymin))
+                            ges_points_per_box.append((xmax - xmin) * (ymax - ymin))
+                        break
+
+    if from_rgb_detection:
+        _, det_box_class_list, det_box_geometry_list, _ = \
+            read_box_file(rgb_det_filename)
+
+        for box_idx in range(len(det_box_class_list)):
+            for i in range(len(type_whitelist)):
+                if type_whitelist[i] == det_box_class_list[box_idx]:
+                    xmin, ymin, xmax, ymax = det_box_geometry_list[box_idx]
+                    if ymax - ymin >= img_height_threshold:
+                        points_per_box[i].append((xmax - xmin) * (ymax - ymin))
+                        ges_points_per_box.append((xmax - xmin) * (ymax - ymin))
+                    break
+
+    import matplotlib.pyplot as plt
+
+    for i in range(len(type_whitelist)):
+        print(type_whitelist[i])
+        print(len(points_per_box[i]))
+        print(np.mean(points_per_box[i]))
+        print(np.var(points_per_box[i]))
+        plt.hist(points_per_box[i], bins='auto')
+        plt.title('Pixels per box of type ' + type_whitelist[i])
+        plt.savefig(train_split+' - '+'Pixels per box of type ' + type_whitelist[i])
+        plt.show()
+        print()
+
+    print('Ges')
+    plt.hist(ges_points_per_box, bins='auto')
+    plt.title('Pixels per box of any type')
+    plt.savefig(train_split+' - '+'Pixels per box of any type')
+    plt.show()
+    print(len(ges_points_per_box))
+    print(np.mean(ges_points_per_box))
+    print(np.var(ges_points_per_box))
+    print()
+
+def extract_frustum_data(split_file_datapath,
+                         split, output_filename,
+                         viz=False,
+                         type_whitelist=['Car'],
+                         from_rgb_detection=True,
+                         rgb_det_filename="",
+                         img_height_threshold=25,
+                         lidar_point_threshold=5):
     ''' Extract point clouds in frustums extruded from 2D detection boxes.
         Update: Lidar points and 3d boxes are in *rect camera* coord system
             (as that in 3d box label files)
@@ -444,15 +510,31 @@ def extract_frustum_data_rgb_detection(box_det_filename, split, output_filename,
     Output:
         None (will write a .pickle file to the disk)
     '''
+
+    image_idx_list = [int(line.rstrip()) for line in open(split_file_datapath)]
     dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
+
 
     # image labels
     image_pc_label_list = []
     box_detected_label_list = []
+
+    if not from_rgb_detection:
+        det_box_image_index_list = []
+        det_box_class_list = []
+        det_box_geometry_list = []
+        det_box_certainty_list = []
+
+    print('Filling Image List')
+    o_filler = np.zeros(0, np.object)
+    b_filler = np.zeros(0, np.bool_)
     for image_idx in range(dataset.num_samples):
+        image_pc_label_list.append(o_filler)
+        box_detected_label_list.append(b_filler)
+
+    for image_idx in image_idx_list:
         print('image idx: %d/%d' % \
               ( image_idx, dataset.num_samples))
-
         calib = dataset.get_calibration(image_idx)  # 3 by 4 matrix
 
         pc_velo = dataset.get_lidar(image_idx)
@@ -475,13 +557,18 @@ def extract_frustum_data_rgb_detection(box_det_filename, split, output_filename,
             overlapping_3d_boxes = np.nonzero(pc_labels[instance_pc_indexes])[0]
             pc_labels[instance_pc_indexes] = label_object.type
             (pc_labels[instance_pc_indexes])[overlapping_3d_boxes] = 'DontCare'
+            if not from_rgb_detection and label_object.type in type_whitelist:
+                det_box_geometry_list.append(label_object.box2d)
+                det_box_certainty_list.append(1)
+                det_box_class_list.append(label_object.type)
+                det_box_image_index_list.append(image_idx)
 
-        image_pc_label_list.append(pc_labels)
-        box_detected_label_list.append(np.zeros(pc_labels.shape, np.bool_))
+        image_pc_label_list[image_idx]=pc_labels
+        box_detected_label_list[image_idx]=np.zeros(pc_labels.shape, np.bool_)
 
-    # point cloud
-    det_box_image_index_list, det_box_class_list, det_box_geometry_list, det_box_certainty_list = \
-        read_box_file(box_det_filename)
+    if from_rgb_detection:
+        det_box_image_index_list, det_box_class_list, det_box_geometry_list, det_box_certainty_list = \
+            read_box_file(rgb_det_filename)
 
     cache_id = -1
     cache = None
@@ -569,7 +656,7 @@ def extract_frustum_data_rgb_detection(box_det_filename, split, output_filename,
         box_image_id_list.append(image_idx)
 
     fn = np.zeros((len(type_whitelist)), np.int_)
-    for image_idx in range(dataset.num_samples):
+    for image_idx in image_idx_list:
         undetected_labels = image_pc_label_list[image_idx][np.logical_not(box_detected_label_list[image_idx])]
         for type_idx in range(len(type_whitelist)):
             fn += np.count_nonzero(undetected_labels == type_whitelist[type_idx])
@@ -650,6 +737,7 @@ if __name__=='__main__':
     parser.add_argument('--gen_train_rgb_detection', action='store_true', help='Generate train split frustum data with RGB detection 2D boxes')
     parser.add_argument('--gen_val', action='store_true', help='Generate val split frustum data with GT 2D boxes')
     parser.add_argument('--gen_val_rgb_detection', action='store_true', help='Generate val split frustum data with RGB detection 2D boxes')
+    parser.add_argument('--show_pixel_statistics', action='store_true', help='Show Pixel Statistics')
     parser.add_argument('--car_only', action='store_true', help='Only generate cars; otherwise cars, peds and cycs')
     args = parser.parse_args()
 
@@ -664,34 +752,70 @@ if __name__=='__main__':
         type_whitelist = ['Car', 'Pedestrian', 'Cyclist']
         output_prefix = 'frustum_carpedcyc_'
 
-    # if args.gen_val:
-    #     extract_frustum_data(\
-    #         os.path.join(BASE_DIR, 'image_sets/val.txt'),
-    #         'training',
-    #         os.path.join(BASE_DIR, output_prefix+'val.pickle'),
-    #         viz=False, perturb_box2d=False, augmentX=1,
-    #         type_whitelist=type_whitelist)
+    if args.gen_val:
+        extract_frustum_data(\
+            os.path.join(BASE_DIR, 'image_sets/val.txt'),
+            'training',
+            os.path.join(BASE_DIR, output_prefix+'val.pickle'),
+            viz=False, perturb_box2d=False, augmentX=1,
+            type_whitelist=type_whitelist,
+            from_rgb_detection=True)
 
     if args.gen_val_rgb_detection:
-        extract_frustum_data_rgb_detection(\
-            os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
+        extract_frustum_data(\
+            os.path.join(BASE_DIR, 'image_sets/val.txt'),
             'training',
             os.path.join(BASE_DIR, output_prefix+'val_rgb_detection.pickle'),
             viz=False,
-            type_whitelist=type_whitelist)
+            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
+            type_whitelist=type_whitelist,
+            from_rgb_detection=True)
 
-    # if args.gen_train:
-    #     extract_frustum_data(\
-    #         os.path.join(BASE_DIR, 'image_sets/train.txt'),
-    #         'training',
-    #         os.path.join(BASE_DIR, output_prefix+'train.pickle'),
-    #         viz=False, perturb_box2d=True, augmentX=5,
-    #         type_whitelist=type_whitelist)
+    if args.gen_train:
+        extract_frustum_data(\
+            os.path.join(BASE_DIR, 'image_sets/train.txt'),
+            'training',
+            os.path.join(BASE_DIR, output_prefix+'train.pickle'),
+            viz=False, perturb_box2d=True, augmentX=5,
+            type_whitelist=type_whitelist,
+            from_rgb_detection=True)
 
     if args.gen_train_rgb_detection:
-        extract_frustum_data_rgb_detection(\
-            os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
+        extract_frustum_data(\
+            os.path.join(BASE_DIR, 'image_sets/train.txt'),
             'training',
             os.path.join(BASE_DIR, output_prefix+'train_rgb_detection.pickle'),
             viz=False,
-            type_whitelist=type_whitelist)
+            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
+            type_whitelist=type_whitelist,
+            from_rgb_detection=True)
+
+    if args.show_pixel_statistics:
+        show_points_per_box_statistics( \
+            os.path.join(BASE_DIR, 'image_sets/val.txt'),
+            'training',
+            'rgb_detection val',
+            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
+            type_whitelist=type_whitelist,
+            from_rgb_detection=True)
+        show_points_per_box_statistics( \
+            os.path.join(BASE_DIR, 'image_sets/val.txt'),
+            'training',
+            'ideal boxes val',
+            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
+            type_whitelist=type_whitelist,
+            from_rgb_detection=False)
+        show_points_per_box_statistics( \
+            os.path.join(BASE_DIR, 'image_sets/train.txt'),
+            'training',
+            'rgb_detection train',
+            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
+            type_whitelist=type_whitelist,
+            from_rgb_detection=True)
+        show_points_per_box_statistics( \
+            os.path.join(BASE_DIR, 'image_sets/train.txt'),
+            'training',
+            'ideal boxes train',
+            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
+            type_whitelist=type_whitelist,
+            from_rgb_detection=False)
