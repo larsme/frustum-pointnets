@@ -489,7 +489,7 @@ def show_points_per_box_statistics(split_file_datapath,
 
 def extract_frustum_data(split_file_datapath,
                          split, output_filename,
-                         viz=False,
+                         viz=False, perturb_box2d=False, augmentX=1,
                          type_whitelist=['Car'],
                          from_rgb_detection=True,
                          rgb_det_filename="",
@@ -500,10 +500,15 @@ def extract_frustum_data(split_file_datapath,
             (as that in 3d box label files)
 
     Input:
-        det_filename: string, each line is
-            img_path typeid confidence xmin ymin xmax ymax
+        split_file_datapath: string, each line of the file is a image sample ID
         split: string, either trianing or testing
         output_filename: string, the name for output .pickle file
+        viz: bool, whether to visualize extracted data
+        perturb_box2d: bool, whether to perturb the box2d
+            (used for data augmentation in train set)
+        augmentX: scalar, how many augmentations to have for each 2D box (no augmentation => 1).
+        rgb_det_filename: string, each line is
+            img_path typeid confidence xmin ymin xmax ymax
         type_whitelist: a list of strings, object types we are interested in.
         img_height_threshold: int, neglect image with height lower than that.
         lidar_point_threshold: int, neglect frustum with too few points.
@@ -511,6 +516,8 @@ def extract_frustum_data(split_file_datapath,
         None (will write a .pickle file to the disk)
     '''
 
+    if not perturb_box2d:
+        augmentX = 1
     image_idx_list = [int(line.rstrip()) for line in open(split_file_datapath)]
     dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
 
@@ -525,7 +532,6 @@ def extract_frustum_data(split_file_datapath,
         det_box_geometry_list = []
         det_box_certainty_list = []
 
-    print('Filling Image List')
     o_filler = np.zeros(0, np.object)
     b_filler = np.zeros(0, np.bool_)
     for image_idx in range(dataset.num_samples):
@@ -545,7 +551,7 @@ def extract_frustum_data(split_file_datapath,
         img = dataset.get_image(image_idx)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_height, img_width, img_channel = img.shape
-        _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov( \
+        _, pc_image_coord, img_fov_inds, _ = get_lidar_in_image_fov( \
             pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
         pc_rect = pc_rect[img_fov_inds, :]
 
@@ -597,7 +603,7 @@ def extract_frustum_data(split_file_datapath,
             img = dataset.get_image(image_idx)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_height, img_width, img_channel = img.shape
-            _, pc_image_coord, img_fov_inds = get_lidar_in_image_fov( \
+            _, pc_image_coord, img_fov_inds, _ = get_lidar_in_image_fov( \
                 pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
             pc_rect = pc_rect[img_fov_inds, :]
             pc_image_coord = pc_image_coord[img_fov_inds, :]
@@ -611,49 +617,54 @@ def extract_frustum_data(split_file_datapath,
         if det_box_class_list[box_idx] not in type_whitelist:
             continue
 
-        # 2D BOX: Get pts rect backprojected
-        xmin, ymin, xmax, ymax = det_box_geometry_list[box_idx]
-        box_fov_inds = (pc_image_coord[:, 0] < xmax) & \
-                       (pc_image_coord[:, 0] >= xmin) & \
-                       (pc_image_coord[:, 1] < ymax) & \
-                       (pc_image_coord[:, 1] >= ymin)
-        pc_in_box_count = np.count_nonzero(box_fov_inds)
+        for augment_count in range(augmentX):
+            # 2D BOX: Get pts rect backprojected
+            if perturb_box2d and augment_count > 0:
+                xmin, ymin, xmax, ymax = random_shift_box2d(det_box_geometry_list[box_idx])
+            else:
+                xmin, ymin, xmax, ymax = det_box_geometry_list[box_idx]
 
-        # Pass objects that are too small
-        if ymax - ymin < img_height_threshold or \
-                pc_in_box_count < lidar_point_threshold:
-            continue
+            box_fov_inds = (pc_image_coord[:, 0] < xmax) & \
+                           (pc_image_coord[:, 0] >= xmin) & \
+                           (pc_image_coord[:, 1] < ymax) & \
+                           (pc_image_coord[:, 1] >= ymin)
+            pc_in_box_count = np.count_nonzero(box_fov_inds)
 
-        # Get frustum angle (according to center pixel in 2D BOX)
-        box2d_center = np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0])
-        uvdepth = np.zeros((1, 3))
-        uvdepth[0, 0:2] = box2d_center
-        uvdepth[0, 2] = 20  # some random depth
-        box2d_center_rect = calib.project_image_to_rect(uvdepth)
-        frustum_angle = -1 * np.arctan2(box2d_center_rect[0, 2],
-                                        box2d_center_rect[0, 0])
+            # Pass objects that are too small
+            if ymax - ymin < img_height_threshold or \
+                    pc_in_box_count < lidar_point_threshold:
+                continue
 
-        pts_2d = np.ndarray.astype(np.round(pc_image_coord[box_fov_inds, :]), int)
-        pts_2d[pts_2d < 0] = 0
-        pts_2d[pts_2d[:, 0] >= img_width, 0] = img_width-1
-        pts_2d[pts_2d[:, 1] >= img_height, 1] = img_height-1
-        pc_in_box_colors = img[pts_2d[:, 1], pts_2d[:, 0], :]
-        pc_in_box = np.concatenate((pc_rect[box_fov_inds, :], pc_in_box_colors), axis=1)
+            # Get frustum angle (according to center pixel in 2D BOX)
+            box2d_center = np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0])
+            uvdepth = np.zeros((1, 3))
+            uvdepth[0, 0:2] = box2d_center
+            uvdepth[0, 2] = 20  # some random depth
+            box2d_center_rect = calib.project_image_to_rect(uvdepth)
+            frustum_angle = -1 * np.arctan2(box2d_center_rect[0, 2],
+                                            box2d_center_rect[0, 0])
 
-        box_detected_label_list[image_idx][box_fov_inds] = True
+            pts_2d = np.ndarray.astype(np.round(pc_image_coord[box_fov_inds, :]), int)
+            pts_2d[pts_2d < 0] = 0
+            pts_2d[pts_2d[:, 0] >= img_width, 0] = img_width-1
+            pts_2d[pts_2d[:, 1] >= img_height, 1] = img_height-1
+            pc_in_box_colors = img[pts_2d[:, 1], pts_2d[:, 0], :]
+            pc_in_box = np.concatenate((pc_rect[box_fov_inds, :], pc_in_box_colors), axis=1)
 
-        pc_in_box_labels = np.zeros((pc_in_box_count, 1), np.int_)
-        pc_in_box_labels[pc_labels[box_fov_inds] == det_box_class_list[box_idx]] = 1
-        pc_in_box_labels[pc_labels[box_fov_inds] == 'DontCare'] = -1
+            box_detected_label_list[image_idx][box_fov_inds] = True
 
-        box_class_list.append(det_box_class_list[box_idx])
-        box_certainty_list.append(det_box_certainty_list[box_idx])
-        pc_in_box_list.append(pc_in_box)
-        frustum_angle_list.append(frustum_angle)
-        pc_in_box_label_list.append(pc_in_box_labels)
+            pc_in_box_labels = np.zeros((pc_in_box_count, 1), np.int_)
+            pc_in_box_labels[pc_labels[box_fov_inds] == det_box_class_list[box_idx]] = 1
+            pc_in_box_labels[pc_labels[box_fov_inds] == 'DontCare'] = -1
 
-        pc_in_box_inds_list.append(box_fov_inds)
-        box_image_id_list.append(image_idx)
+            box_class_list.append(det_box_class_list[box_idx])
+            box_certainty_list.append(det_box_certainty_list[box_idx])
+            pc_in_box_list.append(pc_in_box)
+            frustum_angle_list.append(frustum_angle)
+            pc_in_box_label_list.append(pc_in_box_labels)
+
+            pc_in_box_inds_list.append(box_fov_inds)
+            box_image_id_list.append(image_idx)
 
     fn = np.zeros((len(type_whitelist)), np.int_)
     for image_idx in image_idx_list:
@@ -759,14 +770,14 @@ if __name__=='__main__':
             os.path.join(BASE_DIR, output_prefix+'val.pickle'),
             viz=False, perturb_box2d=False, augmentX=1,
             type_whitelist=type_whitelist,
-            from_rgb_detection=True)
+            from_rgb_detection=False)
 
     if args.gen_val_rgb_detection:
         extract_frustum_data(\
             os.path.join(BASE_DIR, 'image_sets/val.txt'),
             'training',
             os.path.join(BASE_DIR, output_prefix+'val_rgb_detection.pickle'),
-            viz=False,
+            viz=False, perturb_box2d=False, augmentX=1,
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=True)
@@ -778,14 +789,14 @@ if __name__=='__main__':
             os.path.join(BASE_DIR, output_prefix+'train.pickle'),
             viz=False, perturb_box2d=True, augmentX=5,
             type_whitelist=type_whitelist,
-            from_rgb_detection=True)
+            from_rgb_detection=False)
 
     if args.gen_train_rgb_detection:
         extract_frustum_data(\
             os.path.join(BASE_DIR, 'image_sets/train.txt'),
             'training',
             os.path.join(BASE_DIR, output_prefix+'train_rgb_detection.pickle'),
-            viz=False,
+            viz=False, perturb_box2d=False, augmentX=1,
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=True)

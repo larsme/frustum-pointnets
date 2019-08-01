@@ -36,6 +36,7 @@ parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate fo
 parser.add_argument('--with_intensity', action='store_true', help='Use Intensity for training')
 parser.add_argument('--with_colors', action='store_true', help='Use Colors for training')
 parser.add_argument('--restore_model_path', default=None, help='Restore model path e.g. log/model.ckpt [default: None]')
+parser.add_argument('--dont_input_box_probabilities', action='store_true', help='Use box probabilities as net inputs')
 FLAGS = parser.parse_args()
 
 
@@ -62,12 +63,12 @@ REAL_CLASSES = ['Car', 'Pedestrian', 'Cyclist']
 
 
 
-# Load Frustum Datasets. Use default data paths
-# print('--- Loading Training Dataset ---')
-# TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classes=REAL_CLASSES,
-#                                         rotate_to_center=True, random_flip=True, random_shift=False, box_class_one_hot=True,
-#                                         from_rgb_detection=True,
-#                                         with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity)
+#Load Frustum Datasets. Use default data paths
+print('--- Loading Training Dataset ---')
+TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classes=REAL_CLASSES,
+                                        rotate_to_center=True, random_flip=True, random_shift=False, box_class_one_hot=True,
+                                        from_rgb_detection=True,
+                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity)
 print('--- Loading Testing Dataset ---')
 TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
                                        rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
@@ -142,10 +143,14 @@ def train():
             with tf.name_scope("batch_input"):
                 batch_input_pc, batch_box_certainty, batch_gt_labels, batch_one_hot_vec = \
                     MODEL.placeholder_inputs(BATCH_SIZE, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES)
-                batch_box_label_prob = tf.multiply(tf.to_float(batch_one_hot_vec),
-                                                   tf.tile(tf.expand_dims(batch_box_certainty, axis=1),
-                                                           [1, NUM_REAL_CLASSES]),
-                                                   'batch_box_label_prob')
+
+                if FLAGS.dont_input_box_probabilities:
+                    batch_box_label_prob = tf.to_float(batch_one_hot_vec, 'batch_one_hot_vec')
+                else:
+                    batch_box_label_prob = tf.multiply(tf.to_float(batch_one_hot_vec),
+                                                       tf.tile(tf.expand_dims(batch_box_certainty, axis=1),
+                                                               [1, NUM_REAL_CLASSES]),
+                                                       'batch_box_label_prob')
 
                 icare = tf.cast(tf.not_equal(batch_gt_labels, -1), tf.int32, 'icare')
                 num_labeled_points = tf.to_float(tf.reduce_sum(icare), 'num_labeled_points') + epsilon
@@ -205,6 +210,14 @@ def train():
                 # losses = tf.get_collection('losses')
                 # total_loss = tf.add_n(losses, name='total_loss')
                 # tf.summary.scalar('total_loss', total_loss)
+
+                learning_rate = get_learning_rate(batch)
+                tf.summary.scalar('learning_rate', learning_rate)
+                if OPTIMIZER == 'momentum':
+                    optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=MOMENTUM)
+                elif OPTIMIZER == 'adam':
+                    optimizer = tf.train.AdamOptimizer(learning_rate)
+                train_op = optimizer.minimize(loss, global_step=batch)
             
             # Add ops to save and restore all the variables.
             saver = tf.train.Saver()
@@ -260,18 +273,18 @@ def train():
                'merged': merged,
                'step': batch}
 
-        eval_one_epoch(sess, ops, test_writer, class_writers)
-        # for epoch in range(MAX_EPOCH):
-        #     log_string('**** EPOCH %03d ****' % (epoch))
-        #     sys.stdout.flush()
-        #
-        #     train_one_epoch(sess, ops, train_writer)
-        #     eval_one_epoch(sess, ops, test_writer, class_writers)
-        #
-        #     # Save the variables to disk.
-        #     if epoch % 10 == 0:
-        #         save_path = saver.save(sess, os.path.join(LOG_DIR, "model.ckpt"))
-        #         log_string("Model saved in file: %s" % save_path)
+        # eval_one_epoch(sess, ops, test_writer, class_writers)
+        for epoch in range(MAX_EPOCH):
+            log_string('**** EPOCH %03d ****' % (epoch))
+            sys.stdout.flush()
+
+            train_one_epoch(sess, ops, train_writer)
+            eval_one_epoch(sess, ops, test_writer, class_writers)
+
+            # Save the variables to disk.
+            if epoch % 10 == 0:
+                save_path = saver.save(sess, os.path.join(LOG_DIR, "model.ckpt"))
+                log_string("Model saved in file: %s" % save_path)
 
 
 def train_one_epoch(sess, ops, train_writer):
@@ -299,7 +312,7 @@ def train_one_epoch(sess, ops, train_writer):
     for batch_idx in range(num_batches):
         start_idx = batch_idx * BATCH_SIZE
         end_idx = min(start_idx+BATCH_SIZE, len(train_idxs))
-        idxs = train_idxs[start_idx:(end_idx + 1)]
+        idxs = train_idxs[start_idx:end_idx]
 
         # batch_data, batch_label, batch_center, \
         # batch_hclass, batch_hres, \
@@ -332,17 +345,8 @@ def train_one_epoch(sess, ops, train_writer):
         #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
         #         feed_dict=feed_dict)
         summary, step, loss, pc_pred_logits = \
-            sess.run([ops['merged'], ops['step'], ops['batch'], ops['loss'], ops['pc_pred_logits']],
+                sess.run([ops['merged'], ops['step'], ops['loss'], ops['pc_pred_logits']],
                      feed_dict=feed_dict)
-
-        with tf.variable_scope("learning"):
-            learning_rate = get_learning_rate(step)
-            tf.summary.scalar('learning_rate', learning_rate)
-            if OPTIMIZER == 'momentum':
-                optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=MOMENTUM)
-            elif OPTIMIZER == 'adam':
-                optimizer = tf.train.AdamOptimizer(learning_rate)
-            train_op = optimizer.minimize(loss, global_step=step)
 
         train_writer.add_summary(summary, step)
 
