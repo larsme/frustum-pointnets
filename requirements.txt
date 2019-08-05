@@ -3,3 +3,11 @@ Pillow==6.1.0
 tensorflow-gpu==1.4.0
 matplotlib==2.2.4
 mayavi==4.7.0
+
+
+
+# nconv
+torch==0.4.1
+torchvision==0.2.1
+scipy==1.1.0
+opencv-python==3.1.0.4

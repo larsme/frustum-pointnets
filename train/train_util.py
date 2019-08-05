@@ -92,7 +92,8 @@ import numpy as np
 #         return batch_data, batch_rot_angle, batch_prob
 
 
-def get_batch(dataset, fixed_batch_size, batch_box_idxs, num_point, num_channel, num_real_classes, batch_box_points_left_to_sample=[]):
+def get_batch(dataset, fixed_batch_size, batch_box_idxs, num_point, num_channel, num_real_classes,
+              batch_box_points_left_to_sample=None):
     ''' Prepare batch data for training/evaluation.
     batch size is determined by start_idx-end_idx
 
@@ -111,30 +112,35 @@ def get_batch(dataset, fixed_batch_size, batch_box_idxs, num_point, num_channel,
     batch_gt_labels = np.zeros((fixed_batch_size, num_point))
     batch_rot_angle = np.zeros((fixed_batch_size,))
     batch_box_certainty = np.zeros((fixed_batch_size,))
-    if len(batch_box_points_left_to_sample) == 0:
+
+    if dataset.segment_all_points and batch_box_points_left_to_sample is None:
         for i in range(real_batch_size):
             batch_box_points_left_to_sample.append([])
     new_batch_box_points_left_to_sample = []
+
     if dataset.box_class_one_hot:
         batch_one_hot_vec = np.zeros((fixed_batch_size, num_real_classes), np.bool_) # for car,ped,cyc
-        for i in range(real_batch_size):
-            batch_input_pc[i, ...], batch_gt_labels[i, ...], batch_rot_angle[i], \
-                batch_box_certainty[i], new_box_points_left_to_sample, batch_one_hot_vec[i, ...] \
-                = dataset[batch_box_idxs[i], batch_box_points_left_to_sample[i]]
-            new_batch_box_points_left_to_sample.append(new_box_points_left_to_sample)
-        for i in range(real_batch_size, fixed_batch_size):
-            new_batch_box_points_left_to_sample.append([])
 
-        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, new_batch_box_points_left_to_sample, \
-               batch_one_hot_vec
+    for i in range(real_batch_size):
+        if dataset.segment_all_points:
+            data = dataset[batch_box_idxs[i], batch_box_points_left_to_sample[i]]
+            new_batch_box_points_left_to_sample.append(data[4])
+        else:
+            data = dataset[batch_box_idxs[i], None]
+
+        batch_input_pc[i, ...] = data[0]
+        batch_gt_labels[i, ...] = data[1]
+        batch_rot_angle[i] = data[2]
+        batch_box_certainty[i] = data[3]
+
+        if dataset.box_class_one_hot:
+            batch_one_hot_vec[i, ...] = data[5]
+
+    if dataset.box_class_one_hot:
+        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, \
+               new_batch_box_points_left_to_sample, batch_one_hot_vec
     else:
-        for i in range(real_batch_size):
-            batch_input_pc[i, ...], batch_gt_labels[i, ...], batch_rot_angle[i], batch_box_certainty[i],\
-                new_box_points_left_to_sample \
-                = dataset[batch_box_idxs[i], batch_box_points_left_to_sample[i]]
-            new_batch_box_points_left_to_sample.append(new_box_points_left_to_sample)
-        for i in range(real_batch_size, fixed_batch_size):
-            new_batch_box_points_left_to_sample.append([])
-        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, new_batch_box_points_left_to_sample
+        return batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, \
+               new_batch_box_points_left_to_sample
 
 

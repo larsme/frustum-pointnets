@@ -298,11 +298,11 @@ class FrustumDataset(object):
 
         if self.from_rgb_detection:
             if self.box_class_one_hot:
-                return input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index], \
-                       left_to_sample, box_class_one_hot_vec
+                return [input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index],
+                        left_to_sample, box_class_one_hot_vec]
             else:
-                return input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index], \
-                       left_to_sample
+                return [input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index],
+                        left_to_sample]
 
     def show_points_per_box_statistics(self):
         import matplotlib.pyplot as plt

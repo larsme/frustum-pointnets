@@ -66,11 +66,13 @@ REAL_CLASSES = ['Car', 'Pedestrian', 'Cyclist']
 #Load Frustum Datasets. Use default data paths
 print('--- Loading Training Dataset ---')
 TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classes=REAL_CLASSES,
-                                        rotate_to_center=True, random_flip=True, random_shift=False, box_class_one_hot=True,
-                                        from_rgb_detection=True,
-                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity)
+                                        random_flip=True, random_shift=False,
+                                        rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
+                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
+                                       segment_all_points=False)
 print('--- Loading Testing Dataset ---')
 TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
+                                        random_flip=False, random_shift=False,
                                        rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
                                        segment_all_points=True)
@@ -109,7 +111,7 @@ def get_learning_rate(batch):
                         DECAY_RATE,          # Decay rate.
                         staircase=True)
     learing_rate = tf.maximum(learning_rate, 0.00001) # CLIP THE LEARNING RATE!
-    return learning_rate        
+    return learning_rate
 
 def get_bn_decay(batch):
     bn_momentum = tf.train.exponential_decay(
@@ -155,7 +157,7 @@ def train():
                 icare = tf.cast(tf.not_equal(batch_gt_labels, -1), tf.int32, 'icare')
                 num_labeled_points = tf.to_float(tf.reduce_sum(icare), 'num_labeled_points') + epsilon
 
-            # Get model and losses 
+            # Get model and losses
             # end_points = MODEL.get_model(pointclouds_pl, one_hot_vec_pl,
             #     is_training_pl, bn_decay=bn_decay)
 
@@ -211,6 +213,7 @@ def train():
                 # total_loss = tf.add_n(losses, name='total_loss')
                 # tf.summary.scalar('total_loss', total_loss)
 
+                # Get training operator
                 learning_rate = get_learning_rate(batch)
                 tf.summary.scalar('learning_rate', learning_rate)
                 if OPTIMIZER == 'momentum':
@@ -218,10 +221,10 @@ def train():
                 elif OPTIMIZER == 'adam':
                     optimizer = tf.train.AdamOptimizer(learning_rate)
                 train_op = optimizer.minimize(loss, global_step=batch)
-            
+
             # Add ops to save and restore all the variables.
             saver = tf.train.Saver()
-        
+
         # Create a session
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -270,6 +273,7 @@ def train():
                'pc_pred_logits': pc_pred_logits,
                # 'centers_pred': end_points['center'],
                'loss': loss,
+               'train_op': train_op,
                'merged': merged,
                'step': batch}
 
@@ -294,7 +298,7 @@ def train_one_epoch(sess, ops, train_writer):
     is_training = True
     log_string(str(datetime.now()))
     log_string('---- EPOCH %03d TRAINING ----' % EPOCH_CNT)
-    
+
     # Shuffle train samples
     train_idxs = np.arange(0, len(TRAIN_DATASET))
     np.random.shuffle(train_idxs)
@@ -312,7 +316,7 @@ def train_one_epoch(sess, ops, train_writer):
     for batch_idx in range(num_batches):
         start_idx = batch_idx * BATCH_SIZE
         end_idx = min(start_idx+BATCH_SIZE, len(train_idxs))
-        idxs = train_idxs[start_idx:end_idx]
+        batch_idxs = train_idxs[start_idx:end_idx]
 
         # batch_data, batch_label, batch_center, \
         # batch_hclass, batch_hres, \
@@ -321,7 +325,7 @@ def train_one_epoch(sess, ops, train_writer):
         #     get_batch(TRAIN_DATASET, train_idxs, start_idx, end_idx,
         #         NUM_POINT, NUM_CHANNEL)
         batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, _, batch_one_hot_vec = \
-            get_batch(TRAIN_DATASET, BATCH_SIZE, idxs, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES)
+            get_batch(TRAIN_DATASET, BATCH_SIZE, batch_idxs, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES)
 
         # feed_dict = {ops['pointclouds_pl']: batch_data,
         #              ops['one_hot_vec_pl']: batch_one_hot_vec,
@@ -344,8 +348,8 @@ def train_one_epoch(sess, ops, train_writer):
         #         ops['logits'], ops['centers_pred'],
         #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
         #         feed_dict=feed_dict)
-        summary, step, loss, pc_pred_logits = \
-                sess.run([ops['merged'], ops['step'], ops['loss'], ops['pc_pred_logits']],
+        summary, step, _, loss, pc_pred_logits = \
+            sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'], ops['pc_pred_logits']],
                      feed_dict=feed_dict)
 
         train_writer.add_summary(summary, step)
@@ -374,8 +378,8 @@ def train_one_epoch(sess, ops, train_writer):
             # iou2ds_sum = 0
             # iou3ds_sum = 0
             # iou3d_correct_cnt = 0
-        
-        
+
+
 def eval_one_epoch(sess, ops, test_writer, class_writers):
     ''' Simple evaluation for one epoch on the frustum dataset.
     ops is dict mapping from string to tf ops """
@@ -464,14 +468,14 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
             #         ops['loss'], ops['logits'],
             #         ops['end_points']['iou2ds'], ops['end_points']['iou3ds']],
             #         feed_dict=feed_dict)
-            summary, step, loss_val, pc_pred_logits = \
-                sess.run([ops['merged'], ops['step'], ops['loss'], ops['pc_pred_logits']],
+            summary, step, _, loss, pc_pred_logits = \
+                sess.run([ops['merged'], ops['step'], ops['train_op'], ops['loss'], ops['pc_pred_logits']],
                          feed_dict=feed_dict)
 
             test_writer.add_summary(summary, step)
 
             pc_pred_labels = np.argmax(pc_pred_logits, 2)
-            loss_sum += loss_val
+            loss_sum += loss
             for l in range(NUM_CLASSES):
                 total_seen_class[l] += np.sum(batch_gt_labels == l)
                 total_correct_class[l] += (np.sum((pc_pred_labels == l) & (batch_gt_labels == l)))

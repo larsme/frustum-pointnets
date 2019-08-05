@@ -142,8 +142,8 @@ def get_lidar_in_image_fov(pc_velo, calib, xmin, ymin, xmax, ymax,
     fov_inds = (pts_2d[:, 0] < xmax) \
                & (pts_2d[:, 0] >= xmin) \
                & (pts_2d[:, 1] < ymax) \
-               & (pts_2d[:, 1] >= ymin)
-    fov_inds = fov_inds & (pc_velo[:, 0] > clip_distance)
+               & (pts_2d[:, 1] >= ymin) \
+               & (pts_2d_depth > clip_distance)
     imgfov_pc_velo = pc_velo[fov_inds, :]
     if return_more:
         return imgfov_pc_velo, pts_2d, fov_inds, pts_2d_depth

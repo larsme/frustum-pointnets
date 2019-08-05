@@ -2,9 +2,19 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="eb934e41-43d3-4685-a309-279245105d02" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/frustum-pointnets.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/frustum-pointnets.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kitti/kitti_object.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/kitti_object.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kitti/prepare_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/prepare_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/results.md" beforeDir="false" afterPath="$PROJECT_DIR$/results.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/command_prep_data.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_prep_data.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/command_train_v1.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_train_v1.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/provider.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/train/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/train.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train/train_util.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/train_util.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />

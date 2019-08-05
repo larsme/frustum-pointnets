@@ -1,5 +1,6 @@
 
 venv/
+venv3_5/
 
 *.pyc
 *.cu.o
@@ -30,3 +31,4 @@ train/detection_results_v1/plot/
 train/pretrained/
 
 train/logs
+
