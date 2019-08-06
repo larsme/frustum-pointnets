@@ -1,8 +1,23 @@
 #/bin/bash
-python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzi_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
-python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzi_no_box_certainty/train2 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
-python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzi_no_box_certainty/train3 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
-python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzi_no_box_certainty/train4 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
+
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_c_completion_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion --with_depth_confidences
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_completion_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_c_completion_no_box_certainty/train2 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion --with_depth_confidences
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_completion_no_box_certainty/train2 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_c_completion_no_box_certainty/train3 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion --with_depth_confidences
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_completion_no_box_certainty/train3 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_c_completion_no_box_certainty/train4 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion --with_depth_confidences
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_completion_no_box_certainty/train4 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_depth_completion
+
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_no_box_certainty/train2 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_no_box_certainty/train3 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_no_box_certainty/train4 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities
+
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzrgb_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzrgb_no_box_certainty/train2 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzrgb_no_box_certainty/train3 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors
+python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzrgb_no_box_certainty/train4 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors
 
 
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyzi_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --with_intensity --dont_input_box_probabilities

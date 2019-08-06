@@ -5,7 +5,8 @@ Date: September 2017
 '''
 from __future__ import print_function
 
-import cPickle as pickle
+# import cPickle as pickle # python 2.7
+import pickle as pickle # python 3.5
 import sys
 import os
 import numpy as np
@@ -104,6 +105,7 @@ class FrustumDataset(object):
                  random_flip=False, random_shift=False, rotate_to_center=False,
                  overwritten_data_path=None, from_rgb_detection=False, box_class_one_hot=False,
                  with_intensity=True, with_color=True, vizualize_labled_images=False,
+                 with_depth_confidences=False, from_depth_completion=False,
                  segment_all_points=False):
         '''
         Input:
@@ -121,6 +123,9 @@ class FrustumDataset(object):
             box_class_one_hot: bool, if True, return one hot vector
         '''
 
+        assert from_depth_completion or not with_depth_confidences
+        assert not from_depth_completion or not with_intensity
+
         self.classes = classes
         self.npoints = npoints
         self.random_flip = random_flip
@@ -130,10 +135,15 @@ class FrustumDataset(object):
         self.segment_all_points = segment_all_points
 
         if overwritten_data_path is None:
+            designation = 'frustum_'
+            assert len(classes) == 3
+            designation += 'carpedcyc_'
+            if from_depth_completion:
+                designation += 'depthcompletion_'
+            designation += split
             if from_rgb_detection:
-                overwritten_data_path = os.path.join(ROOT_DIR, 'kitti/frustum_carpedcyc_%s_rgb_detection.pickle'%(split))
-            else:
-                overwritten_data_path = os.path.join(ROOT_DIR, 'kitti/frustum_carpedcyc_%s.pickle'%(split))
+                designation += '_rgb_detection'
+            overwritten_data_path = os.path.join(ROOT_DIR, 'kitti/%s.pickle' % (designation))
 
         self.from_rgb_detection = from_rgb_detection
         if from_rgb_detection:
@@ -154,15 +164,21 @@ class FrustumDataset(object):
 
                 print('box point cloud')
                 self.pc_in_box_list = pickle.load(fp)
-                num_channels = 3
-                channels = np.zeros(7, np.bool_)
+                if from_depth_completion:
+                    channels = np.zeros(7, np.bool_)
+                else:
+                    channels = np.zeros(7, np.bool_)
                 channels[:3] = 1
+                num_channels = 3
                 if with_intensity:
+                    channels[num_channels] = 1
                     num_channels += 1
-                    channels[3] = 1
+                if with_depth_confidences:
+                    channels[num_channels] = 1
+                    num_channels += 1
                 if with_color:
+                    channels[num_channels:] = 1
                     num_channels += 3
-                    channels[4:] = 1
                 if not with_intensity or not with_color:
                     print('removing unused channels')
                     for box_idx in range(np.size(self.pc_in_box_list, 0)):

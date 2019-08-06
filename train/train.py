@@ -35,6 +35,8 @@ parser.add_argument('--decay_step', type=int, default=200000, help='Decay step f
 parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
 parser.add_argument('--with_intensity', action='store_true', help='Use Intensity for training')
 parser.add_argument('--with_colors', action='store_true', help='Use Colors for training')
+parser.add_argument('--with_depth_confidences', action='store_true', help='Use depth completion confidences')
+parser.add_argument('--from_depth_completion', action='store_true', help='Use point cloud from depth completion')
 parser.add_argument('--restore_model_path', default=None, help='Restore model path e.g. log/model.ckpt [default: None]')
 parser.add_argument('--dont_input_box_probabilities', action='store_true', help='Use box probabilities as net inputs')
 FLAGS = parser.parse_args()
@@ -54,6 +56,8 @@ DECAY_RATE = FLAGS.decay_rate
 NUM_CHANNEL = 3 # point feature channel
 if FLAGS.with_intensity:
     NUM_CHANNEL = NUM_CHANNEL + 1
+if FLAGS.with_depth_confidences:
+    NUM_CHANNEL = NUM_CHANNEL + 1
 if FLAGS.with_colors:
     NUM_CHANNEL = NUM_CHANNEL + 3
 NUM_CLASSES = 2 # segmentation net has two classes
@@ -69,12 +73,16 @@ TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classe
                                         random_flip=True, random_shift=False,
                                         rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
                                         with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
-                                       segment_all_points=False)
+                                        with_depth_confidences=FLAGS.with_depth_confidences,
+                                        from_depth_completion=FLAGS.from_depth_completion,
+                                        segment_all_points=False)
 print('--- Loading Testing Dataset ---')
 TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
-                                        random_flip=False, random_shift=False,
+                                       random_flip=False, random_shift=False,
                                        rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
+                                       with_depth_confidences=FLAGS.with_depth_confidences,
+                                       from_depth_completion=FLAGS.from_depth_completion,
                                        segment_all_points=True)
 
 print('--- Loading Model ---')
@@ -302,7 +310,7 @@ def train_one_epoch(sess, ops, train_writer):
     # Shuffle train samples
     train_idxs = np.arange(0, len(TRAIN_DATASET))
     np.random.shuffle(train_idxs)
-    num_batches = len(TRAIN_DATASET)/BATCH_SIZE
+    num_batches = int(np.ceil(len(TRAIN_DATASET)/BATCH_SIZE))
 
     # To collect statistics
     total_correct = 0

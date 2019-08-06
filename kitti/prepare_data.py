@@ -623,7 +623,7 @@ def extract_frustum_data(split_file_datapath,
             pts_image_2d[pts_image_2d < 0] = 0
             pts_image_2d[pts_image_2d[:, 0] >= img_width, 0] = img_width-1
             pts_image_2d[pts_image_2d[:, 1] >= img_height, 1] = img_height-1
-            # pc_labels = image_pc_label_list[image_idx]
+            pc_labels = image_pc_label_list[image_idx]
             pc_image_depths = pc_image_depths[img_fov_inds]
 
             dense_depths = []
@@ -640,7 +640,7 @@ def extract_frustum_data(split_file_datapath,
                         # lidarmap[py, px, 2] = 1 # mask
                         # lidarmap[py, px, 1] = pc_velo[i, 3]
                         # lidarmap[py, px, 2] = times[i]
-                dense_depths, confidences = mytrainer.return_one_prediction(lidarmap, img)
+                dense_depths, confidences = mytrainer.return_one_prediction(lidarmap*256, img)
 
             cache = [calib, pc_rect, pts_image_2d, img_height, img_width, img, pc_labels, dense_depths, confidences]
             cache_id = image_idx
@@ -694,7 +694,8 @@ def extract_frustum_data(split_file_datapath,
                     pc_in_box_labels[pc_labels[box_fov_inds] == det_box_class_list[box_idx]] = 1
                     pc_in_box_labels[pc_labels[box_fov_inds] == 'DontCare'] = -1
 
-                    selected_pixels_in_box = pts_2d
+                    selected_pixels_in_box_row = pts_2d[:, 1]
+                    selected_pixels_in_box_col = pts_2d[:, 0]
                 else:
                     int_x_min = int(max(np.floor(xmin), 0))
                     int_x_max = int(min(np.ceil(xmax), img_width-1))
