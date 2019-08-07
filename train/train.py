@@ -36,9 +36,13 @@ parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate fo
 parser.add_argument('--with_intensity', action='store_true', help='Use Intensity for training')
 parser.add_argument('--with_colors', action='store_true', help='Use Colors for training')
 parser.add_argument('--with_depth_confidences', action='store_true', help='Use depth completion confidences')
-parser.add_argument('--from_depth_completion', action='store_true', help='Use point cloud from depth completion')
+parser.add_argument('--from_guided_depth_completion', action='store_true', help='Use point cloud from depth completion')
+parser.add_argument('--from_unguided_depth_completion', action='store_true',
+                    help='Use point cloud from unguided depth completion')
+parser.add_argument('--from_depth_prediction', action='store_true', help='Use point cloud from depth prediction')
 parser.add_argument('--restore_model_path', default=None, help='Restore model path e.g. log/model.ckpt [default: None]')
 parser.add_argument('--dont_input_box_probabilities', action='store_true', help='Use box probabilities as net inputs')
+parser.add_argument('--avoid_point_duplicates', action='store_true', help='Try to avoid point duplicates when sampling')
 FLAGS = parser.parse_args()
 
 
@@ -74,16 +78,20 @@ TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classe
                                         rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
                                         with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
                                         with_depth_confidences=FLAGS.with_depth_confidences,
-                                        from_depth_completion=FLAGS.from_depth_completion,
-                                        segment_all_points=False)
+                                        from_guided_depth_completion=FLAGS.from_guided_depth_completion,
+                                        from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
+                                        from_depth_prediction=FLAGS.from_depth_prediction,
+                                        segment_all_points=False, avoid_duplicates=FLAGS.avoid_point_duplicates)
 print('--- Loading Testing Dataset ---')
 TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
                                        random_flip=False, random_shift=False,
                                        rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
                                        with_depth_confidences=FLAGS.with_depth_confidences,
-                                       from_depth_completion=FLAGS.from_depth_completion,
-                                       segment_all_points=True)
+                                       from_guided_depth_completion=FLAGS.from_guided_depth_completion,
+                                       from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
+                                       from_depth_prediction=FLAGS.from_depth_prediction,
+                                       segment_all_points=True, avoid_duplicates=FLAGS.avoid_point_duplicates)
 
 print('--- Loading Model ---')
 MODEL = importlib.import_module(FLAGS.model) # import network module

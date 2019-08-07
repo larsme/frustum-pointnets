@@ -105,8 +105,9 @@ class FrustumDataset(object):
                  random_flip=False, random_shift=False, rotate_to_center=False,
                  overwritten_data_path=None, from_rgb_detection=False, box_class_one_hot=False,
                  with_intensity=True, with_color=True, vizualize_labled_images=False,
-                 with_depth_confidences=False, from_depth_completion=False,
-                 segment_all_points=False):
+                 with_depth_confidences=False, from_guided_depth_completion=False, from_unguided_depth_completion=False,
+                 from_depth_prediction=False,
+                 segment_all_points=False, avoid_duplicates=False):
         '''
         Input:
             npoints: int scalar, number of points for frustum point cloud.
@@ -122,9 +123,12 @@ class FrustumDataset(object):
                 groundtruth, just return data elements.
             box_class_one_hot: bool, if True, return one hot vector
         '''
+        from_depth_completion = from_guided_depth_completion or from_unguided_depth_completion
+        use_net = from_depth_prediction or from_depth_completion
 
+        assert int(from_guided_depth_completion) + int(from_unguided_depth_completion) + int(from_depth_prediction) <= 1
         assert from_depth_completion or not with_depth_confidences
-        assert not from_depth_completion or not with_intensity
+        assert not (use_net and with_intensity)
 
         self.classes = classes
         self.npoints = npoints
@@ -133,13 +137,18 @@ class FrustumDataset(object):
         self.rotate_to_center = rotate_to_center
         self.box_class_one_hot = box_class_one_hot
         self.segment_all_points = segment_all_points
+        self.avoid_duplicates = avoid_duplicates
 
         if overwritten_data_path is None:
             designation = 'frustum_'
             assert len(classes) == 3
             designation += 'carpedcyc_'
-            if from_depth_completion:
-                designation += 'depthcompletion_'
+            if from_unguided_depth_completion:
+                designation += 'unguided_completion_'
+            elif from_guided_depth_completion:
+                designation += 'guided_completion_'
+            elif from_depth_prediction:
+                designation += 'prediction_'
             designation += split
             if from_rgb_detection:
                 designation += '_rgb_detection'
@@ -164,22 +173,26 @@ class FrustumDataset(object):
 
                 print('box point cloud')
                 self.pc_in_box_list = pickle.load(fp)
-                if from_depth_completion:
+                if from_depth_prediction:
+                    channels = np.zeros(6, np.bool_)
+                elif from_depth_completion:
                     channels = np.zeros(7, np.bool_)
                 else:
                     channels = np.zeros(7, np.bool_)
                 channels[:3] = 1
-                num_channels = 3
-                if with_intensity:
-                    channels[num_channels] = 1
-                    num_channels += 1
-                if with_depth_confidences:
-                    channels[num_channels] = 1
-                    num_channels += 1
+                i_channel = 3
+                if not use_net:
+                    if with_intensity:
+                        channels[i_channel] = 1
+                    i_channel += 1
+                elif from_depth_completion:
+                    if with_depth_confidences:
+                        channels[i_channel] = 1
+                    i_channel += 1
                 if with_color:
-                    channels[num_channels:] = 1
-                    num_channels += 3
-                if not with_intensity or not with_color:
+                    channels[i_channel:] = 1
+                i_channel += 3
+                if np.sum(channels) < i_channel:
                     print('removing unused channels')
                     for box_idx in range(np.size(self.pc_in_box_list, 0)):
                         self.pc_in_box_list[box_idx] = self.pc_in_box_list[box_idx][:, channels]
@@ -239,12 +252,18 @@ class FrustumDataset(object):
 
         # Resample
         if self.segment_all_points:
-            if len(left_to_sample) < self.npoints:
+            if len(left_to_sample) <= self.npoints:
                 choice = np.zeros(self.npoints, np.int_)
                 choice[0:len(left_to_sample)] = left_to_sample
-                choice[len(left_to_sample):self.npoints] = np.random.choice(input_pc.shape[0],
-                                                                            self.npoints-len(left_to_sample),
-                                                                            replace=True)
+                if self.avoid_duplicates and input_pc.shape[0] >= self.npoints:
+                    sampled = np.delete(range(input_pc.shape[0]), left_to_sample)
+                    choice[len(left_to_sample):self.npoints] = np.random.choice(sampled,
+                                                                                self.npoints - len(left_to_sample),
+                                                                                replace=False)
+                else:
+                    choice[len(left_to_sample):self.npoints] = np.random.choice(input_pc.shape[0],
+                                                                                self.npoints - len(left_to_sample),
+                                                                                replace=True)
                 idontcare = np.zeros(self.npoints, np.bool_)
                 idontcare[len(left_to_sample):self.npoints] = True
                 permut = np.random.permutation(range(self.npoints))
@@ -257,7 +276,10 @@ class FrustumDataset(object):
                 choice = choice[:self.npoints]
                 idontcare = np.zeros(self.npoints, np.bool_)
         else:
-            choice = np.random.choice(input_pc.shape[0], self.npoints, replace=True)
+            if self.avoid_duplicates and input_pc.shape[0] >= self.npoints:
+                choice = np.random.choice(input_pc.shape[0], self.npoints, replace=False)
+            else:
+                choice = np.random.choice(input_pc.shape[0], self.npoints, replace=True)
             idontcare = np.zeros(self.npoints, np.bool_)
         input_pc = input_pc[choice, :]
 

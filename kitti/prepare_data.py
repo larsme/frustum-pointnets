@@ -19,8 +19,6 @@ import pickle as pickle # python 3.5
 # import cPickle as pickle # python 2.7
 from kitti_object import *
 import argparse
-sys.path.append(os.path.join(ROOT_DIR, '../nconv'))
-from run_nconv_cnn import load_net as load_net
 
 
 def in_hull(p, hull):
@@ -498,7 +496,9 @@ def extract_frustum_data(split_file_datapath,
                          rgb_det_filename="",
                          img_height_threshold=25,
                          lidar_point_threshold=5,
-                         from_depth_completion=False,
+                         from_unguided_depth_completion=False,
+                         from_guided_depth_completion=False,
+                         from_depth_prediction=False,
                          fill_n_points=-1):
     ''' Extract point clouds in frustums extruded from 2D detection boxes.
         Update: Lidar points and 3d boxes are in *rect camera* coord system
@@ -524,15 +524,26 @@ def extract_frustum_data(split_file_datapath,
     assert augment_x > 0
     if not perturb_box2d:
         augment_x = 1
-    if not from_depth_completion:
-        fill_n_points = -1
-    elif from_depth_completion:
-        # mytrainer = load_net('exp_guided_nconv_cnn_l1', mode='bla', checkpoint_num=40, set_='bla')
-        mytrainer = load_net('exp_unguided_depth', mode='bla', checkpoint_num=3, set_='bla')
+
+    from_depth_completion = from_unguided_depth_completion or from_guided_depth_completion
+    use_depth_net = from_depth_completion or from_depth_prediction
+    assert int(from_guided_depth_completion) + int(from_unguided_depth_completion) + int(from_depth_prediction) <= 1
+    assert use_depth_net or fill_n_points == -1
+
+    if from_depth_completion:
+        sys.path.append(os.path.join(ROOT_DIR, '../nconv'))
+        from run_nconv_cnn import load_net
+        if from_guided_depth_completion:
+            depth_net = load_net('exp_guided_nconv_cnn_l1', mode='bla', checkpoint_num=40, set_='bla')
+        else: # from_unguided_depth_completion:
+            depth_net = load_net('exp_unguided_depth', mode='bla', checkpoint_num=3, set_='bla')
+    elif from_depth_prediction:
+        sys.path.append(os.path.join(ROOT_DIR, '../monodepth2'))
+        from monodepth_external import load_net
+        depth_net = load_net("mono+stereo_1024x320", use_cuda=True)
 
     image_idx_list = [int(line.rstrip()) for line in open(split_file_datapath)]
     dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
-
 
     # image labels
     image_pc_label_list = []
@@ -600,7 +611,6 @@ def extract_frustum_data(split_file_datapath,
     box_image_id_list = []
     pc_in_box_inds_list = []
 
-
     for box_idx in range(len(det_box_image_index_list)):
         image_idx = det_box_image_index_list[box_idx]
         print('box idx: %d/%d, image idx: %d' % \
@@ -628,7 +638,7 @@ def extract_frustum_data(split_file_datapath,
 
             dense_depths = []
             confidences = []
-            if fill_n_points>0 and from_depth_completion:
+            if from_depth_completion:
                 lidarmap = np.zeros((img_height, img_width), np.float16)
                 for i in range(pc_image_depths.shape[0]):
                     px = min(max(0, int(round(pts_image_2d[i, 0]))), img_width-1)
@@ -640,7 +650,9 @@ def extract_frustum_data(split_file_datapath,
                         # lidarmap[py, px, 2] = 1 # mask
                         # lidarmap[py, px, 1] = pc_velo[i, 3]
                         # lidarmap[py, px, 2] = times[i]
-                dense_depths, confidences = mytrainer.return_one_prediction(lidarmap*256, img)
+                dense_depths, confidences = depth_net.return_one_prediction(lidarmap*256, img)
+            if from_depth_prediction:
+                dense_depths = depth_net.return_one_prediction(img, post_process=False)
 
             cache = [calib, pc_rect, pts_image_2d, img_height, img_width, img, pc_labels, dense_depths, confidences]
             cache_id = image_idx
@@ -680,14 +692,14 @@ def extract_frustum_data(split_file_datapath,
             image_box_detected_label_list[image_idx][box_fov_inds, augment_i] = True
             pts_2d = pts_image_2d[box_fov_inds, :]
 
-            if fill_n_points < 0:
+            if not use_depth_net:
                 pc_in_box_colors = img[pts_2d[:, 1], pts_2d[:, 0], :]
                 pc_in_box = np.concatenate((pc_rect[box_fov_inds, :], pc_in_box_colors), axis=1)
 
                 pc_in_box_labels = np.zeros((pc_in_box_count, 1), np.int_)
                 pc_in_box_labels[pc_labels[box_fov_inds] == det_box_class_list[box_idx]] = 1
                 pc_in_box_labels[pc_labels[box_fov_inds] == 'DontCare'] = -1
-            elif from_depth_completion:
+            else:
                 num_lidar_points_in_box = np.shape(pts_2d)[0]
                 if num_lidar_points_in_box >= fill_n_points:
                     pc_in_box_labels = np.zeros((pc_in_box_count, 1), np.int_)
@@ -728,14 +740,18 @@ def extract_frustum_data(split_file_datapath,
                     else:
                         inds_in_box = np.squeeze(np.where(labels[box_sub_pixels_row, box_sub_pixels_col] != -1))
                         other_inds_in_box = np.squeeze(np.where(labels[box_sub_pixels_row, box_sub_pixels_col] == -1))
-                        other_inds_in_box_confidence_order = np.argsort(
-                            -confidences[box_sub_pixels_row[other_inds_in_box],
-                            box_sub_pixels_col[other_inds_in_box]])
                         num_points_to_fill = min(fill_n_points, num_pixels_in_box)-num_lidar_points_in_box
-                        most_confident_other_inds = other_inds_in_box[
-                            other_inds_in_box_confidence_order[:num_points_to_fill]]
+                        if from_depth_completion:
+                            other_inds_in_box_confidence_order = np.argsort(
+                                -confidences[box_sub_pixels_row[other_inds_in_box],
+                                box_sub_pixels_col[other_inds_in_box]])
+                            most_confident_other_inds = other_inds_in_box[
+                                other_inds_in_box_confidence_order[:num_points_to_fill]]
+                            sected_other_inds = most_confident_other_inds
+                        else: # from_depth_prediction
+                            sected_other_inds = np.random.choice(other_inds_in_box, num_points_to_fill, replace=False)
 
-                        selected_inds_in_box = np.concatenate((inds_in_box, most_confident_other_inds), axis=0)
+                        selected_inds_in_box = np.concatenate((inds_in_box, sected_other_inds), axis=0)
 
                         selected_box_sub_pixels_row = box_sub_pixels_row[selected_inds_in_box]
                         selected_box_sub_pixels_col = box_sub_pixels_col[selected_inds_in_box]
@@ -751,11 +767,14 @@ def extract_frustum_data(split_file_datapath,
                                                                      np.float),
                                                    np.expand_dims(depths_in_box, 1)), axis=1)
                 new_pc_rect_in_box = calib.project_image_to_rect(new_pc_img_in_box)
-                confidences_in_box = np.expand_dims(
-                    confidences[selected_pixels_in_box_row, selected_pixels_in_box_col], 1)
                 pc_in_box_colors = img[selected_pixels_in_box_row, selected_pixels_in_box_col, :]
 
-                pc_in_box = np.concatenate((new_pc_rect_in_box, confidences_in_box, pc_in_box_colors), axis=1)
+                if from_depth_completion:
+                    confidences_in_box = np.expand_dims(
+                        confidences[selected_pixels_in_box_row, selected_pixels_in_box_col], 1)
+                    pc_in_box = np.concatenate((new_pc_rect_in_box, confidences_in_box, pc_in_box_colors), axis=1)
+                else: #from_depth_prediction
+                    pc_in_box = np.concatenate((new_pc_rect_in_box, pc_in_box_colors), axis=1)
 
             box_class_list.append(det_box_class_list[box_idx])
             box_certainty_list.append(det_box_certainty_list[box_idx])
@@ -800,7 +819,7 @@ def extract_frustum_data(split_file_datapath,
                               fgcolor=None, engine=None, size=(500, 500))
             mlab.points3d(p1[:, 2], -p1[:, 0], -p1[:, 1], seg, mode='point',
                           colormap='gnuplot', scale_factor=1, figure=fig)
-            raw_input()
+            input()
 
 
 def write_2d_rgb_detection(det_filename, split, result_dir):
@@ -852,7 +871,9 @@ if __name__=='__main__':
     parser.add_argument('--gen_val_rgb_detection', action='store_true', help='Generate val split frustum data with RGB detection 2D boxes')
     parser.add_argument('--show_pixel_statistics', action='store_true', help='Show Pixel Statistics')
     parser.add_argument('--car_only', action='store_true', help='Only generate cars; otherwise cars, peds and cycs')
-    parser.add_argument('--from_depth_completion', action='store_true', help='Only generate cars; otherwise cars, peds and cycs')
+    parser.add_argument('--from_unguided_depth_completion', action='store_true', help='Use point cloud from unguided depth completion')
+    parser.add_argument('--from_guided_depth_completion', action='store_true', help='Use point cloud from guided depth completion')
+    parser.add_argument('--from_depth_prediction', action='store_true', help='Use point cloud from depth prediction')
     parser.add_argument('--fill_n_points', type=int, default=-1, help='Fill x points with depth completion / prediction, -1 = use all')
     args = parser.parse_args()
 
@@ -867,8 +888,12 @@ if __name__=='__main__':
         type_whitelist = ['Car', 'Pedestrian', 'Cyclist']
         output_prefix = 'frustum_carpedcyc_'
 
-    if args.from_depth_completion:
-        output_prefix += 'depthcompletion_'
+    if args.from_unguided_depth_completion:
+        output_prefix += 'unguided_completion_'
+    if args.from_guided_depth_completion:
+        output_prefix += 'guided_completion_'
+    if args.from_depth_prediction:
+        output_prefix += 'prediction_'
 
     if args.gen_val:
         extract_frustum_data(\
@@ -877,6 +902,9 @@ if __name__=='__main__':
             os.path.join(BASE_DIR, output_prefix+'val.pickle'),
             viz=False, perturb_box2d=False, augment_x=1,
             type_whitelist=type_whitelist,
+            from_guided_depth_completion=args.from_guided_depth_completion,
+            from_unguided_depth_completion=args.from_unguided_depth_completion,
+            from_depth_prediction=args.from_depth_prediction,
             from_rgb_detection=False)
 
     if args.gen_val_rgb_detection:
@@ -888,7 +916,9 @@ if __name__=='__main__':
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=True,
-            from_depth_completion=args.from_depth_completion,
+            from_guided_depth_completion=args.from_guided_depth_completion,
+            from_unguided_depth_completion=args.from_unguided_depth_completion,
+            from_depth_prediction=args.from_depth_prediction,
             fill_n_points=args.fill_n_points)
 
     if args.gen_train:
@@ -898,6 +928,9 @@ if __name__=='__main__':
             os.path.join(BASE_DIR, output_prefix+'train.pickle'),
             viz=False, perturb_box2d=True, augment_x=5,
             type_whitelist=type_whitelist,
+            from_guided_depth_completion=args.from_guided_depth_completion,
+            from_unguided_depth_completion=args.from_unguided_depth_completion,
+            from_depth_prediction=args.from_depth_prediction,
             from_rgb_detection=False)
 
     if args.gen_train_rgb_detection:
@@ -909,7 +942,9 @@ if __name__=='__main__':
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=True,
-            from_depth_completion=args.from_depth_completion,
+            from_guided_depth_completion=args.from_guided_depth_completion,
+            from_unguided_depth_completion=args.from_unguided_depth_completion,
+            from_depth_prediction=args.from_depth_prediction,
             fill_n_points=args.fill_n_points)
 
     if args.show_pixel_statistics:

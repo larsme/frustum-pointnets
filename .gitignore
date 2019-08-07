@@ -32,3 +32,5 @@ train/pretrained/
 
 train/logs
 
+
+models/mono\+stereo_1024x320/

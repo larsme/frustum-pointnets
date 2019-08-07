@@ -91,3 +91,48 @@ Statistics points per box:
 		var
 			506377.6321574937				591824.9778237893
 	
+
+
+L1 net
+from here
+lidar median: 2986.00
+rescaled median: 11.66
+medians input rgb: 57.00 - 68.00 - 63.00
+medians input rgb: 57.00 - 68.00, 63.00
+(370, 1224, 3)
+medians rescaled input rgb:  0.22 -  0.27 -  0.25
+(1, 3, 370, 1224)
+medians rescaled, transposed input rgb:  0.22 -  0.27 -  0.25
+predicted median:  0.00
+lidar quantiles:  6.13  -  17.57
+predicted quantiles: -0.00  -   0.01
+
+
+
+
+from eval
+torch.Size([1, 3, 352, 1216])
+medians rescaled, transposed input rgb:  0.32 -  0.33 -  0.29
+lidar quantiles: 6  -  42
+predicted median: 13
+predicted quantiles: 6  -  72
+rescaled predicted median: 13
+rescaled predicted quantiles: 6  -  72
+
+
+
+one_prediction from eval
+lidar median: 3200.00
+rescaled median: 12.50
+medians input rgb: 81.00 - 83.00 - 75.00
+medians input rgb: 81.00 - 83.00, 75.00
+(352, 1216, 3)
+medians rescaled input rgb:  0.32 -  0.33 -  0.29
+(1, 3, 352, 1216)
+medians rescaled, transposed input rgb:  0.32 -  0.33 -  0.29
+lidar quantiles: 1616.00  -  10840.00
+predicted median: 13.87
+predicted quantiles:  6.38  -  72.03
+rescaled predicted median: 13.87
+rescaled predicted quantiles:  6.38  -  72.03
+

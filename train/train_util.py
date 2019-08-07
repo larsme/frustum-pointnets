@@ -126,7 +126,7 @@ def get_batch(dataset, fixed_batch_size, batch_box_idxs, num_point, num_channel,
             data = dataset[batch_box_idxs[i], batch_box_points_left_to_sample[i]]
             new_batch_box_points_left_to_sample.append(data[4])
         else:
-            data = dataset[batch_box_idxs[i], None]
+            data = dataset[batch_box_idxs[i], []]
 
         batch_input_pc[i, ...] = data[0]
         batch_gt_labels[i, ...] = data[1]
