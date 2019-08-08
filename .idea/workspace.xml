@@ -3,7 +3,11 @@
   <component name="ChangeListManager">
     <list default="true" id="eb934e41-43d3-4685-a309-279245105d02" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/.fuse_hidden00063d9800000006" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/command_train_v1.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_train_v1.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../nconv/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../nconv/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../nconv/dataloader/KittiDepthDataset.py" beforeDir="false" afterPath="$PROJECT_DIR$/../nconv/dataloader/KittiDepthDataset.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../nconv/trainers/KittiDepthTrainer.py" beforeDir="false" afterPath="$PROJECT_DIR$/../nconv/trainers/KittiDepthTrainer.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -22,6 +26,7 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="ProjectId" id="1OV5FjwNngT3pJyEHEB1F65Qeh6" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="PropertiesComponent">
     <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />

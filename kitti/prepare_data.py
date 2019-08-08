@@ -488,6 +488,7 @@ def show_points_per_box_statistics(split_file_datapath,
     print(np.var(ges_points_per_box))
     print()
 
+
 def extract_frustum_data(split_file_datapath,
                          split, output_filename,
                          viz=False, perturb_box2d=False, augment_x=1,
