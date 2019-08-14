@@ -12,12 +12,12 @@ import cv2
 from PIL import Image
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
-sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'mayavi'))
-import kitti_util as utils
+sys.path.append(ROOT_DIR)
+# sys.path.append(os.path.join(ROOT_DIR, 'mayavi'))
+import kitti.kitti_util as utils
 import pickle as pickle # python 3.5
 # import cPickle as pickle # python 2.7
-from kitti_object import *
+from kitti.kitti_object import *
 import argparse
 
 
@@ -538,6 +538,8 @@ def extract_frustum_data(split_file_datapath,
             depth_net = load_net('exp_guided_nconv_cnn_l1', mode='bla', checkpoint_num=40, set_='bla')
         else: # from_unguided_depth_completion:
             depth_net = load_net('exp_unguided_depth', mode='bla', checkpoint_num=3, set_='bla')
+        desired_image_height = 352
+        desired_image_width = 1216
     elif from_depth_prediction:
         sys.path.append(os.path.join(ROOT_DIR, '../monodepth2'))
         from monodepth_external import load_net
@@ -562,7 +564,7 @@ def extract_frustum_data(split_file_datapath,
         image_pc_label_list.append(o_filler)
         image_box_detected_label_list.append(b_filler)
 
-    for image_idx in image_idx_list:
+    for image_idx in range(10):# image_idx_list:
         print('image idx: %d/%d' % \
               ( image_idx, dataset.num_samples))
         calib = dataset.get_calibration(image_idx)  # 3 by 4 matrix
@@ -575,14 +577,14 @@ def extract_frustum_data(split_file_datapath,
         img = dataset.get_image(image_idx)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_height, img_width, img_channel = img.shape
-        _, pts_image_2d, img_fov_inds, _ = get_lidar_in_image_fov( \
+        _, _, img_fov_inds, _ = get_lidar_in_image_fov( \
             pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
         pc_rect = pc_rect[img_fov_inds, :]
 
         label_objects = dataset.get_label_objects(image_idx)
         pc_labels = np.zeros((np.size(pc_rect, 0)), np.object)
         for label_object in label_objects:
-            box3d_pts_2d, box3d_pts_3d = utils.compute_box_3d(label_object, calib.P)
+            _, box3d_pts_3d = utils.compute_box_3d(label_object, calib.P)
             _, instance_pc_indexes = extract_pc_in_box3d(pc_rect, box3d_pts_3d)
             overlapping_3d_boxes = np.nonzero(pc_labels[instance_pc_indexes])[0]
             pc_labels[instance_pc_indexes] = label_object.type
@@ -627,6 +629,7 @@ def extract_frustum_data(split_file_datapath,
             img = dataset.get_image(image_idx)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_height, img_width, img_channel = img.shape
+
             _, pts_image_2d, img_fov_inds, pc_image_depths = get_lidar_in_image_fov( \
                 pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
             pc_rect = pc_rect[img_fov_inds, :]
@@ -640,18 +643,23 @@ def extract_frustum_data(split_file_datapath,
             dense_depths = []
             confidences = []
             if from_depth_completion:
-                lidarmap = np.zeros((img_height, img_width), np.float16)
-                for i in range(pc_image_depths.shape[0]):
-                    px = min(max(0, int(round(pts_image_2d[i, 0]))), img_width-1)
-                    py = min(max(0, int(round(pts_image_2d[i, 1]))), img_height-1)
-                    depth = pc_image_depths[i]
-                    if lidarmap[py, px] == 0 or lidarmap[py, px] > depth:
-                        # for conflicts, use closer point
-                        lidarmap[py, px] = depth
-                        # lidarmap[py, px, 2] = 1 # mask
-                        # lidarmap[py, px, 1] = pc_velo[i, 3]
-                        # lidarmap[py, px, 2] = times[i]
-                dense_depths, confidences = depth_net.return_one_prediction(lidarmap*256, img)
+                lidarmap = dataset.generate_depth_map(image_idx, 2, desired_image_width, desired_image_height)
+                rgb = Image.fromarray(img).resize((desired_image_width, desired_image_height), Image.LANCZOS)
+                rgb = np.array(rgb, dtype=np.float16)
+
+                # lidarmap = np.zeros((img_height, img_width), np.float16)
+                # for i in range(pc_image_depths.shape[0]):
+                #     px = min(max(0, int(round(pts_image_2d[i, 0]))), img_width-1)
+                #     py = min(max(0, int(round(pts_image_2d[i, 1]))), img_height-1)
+                #     depth = pc_image_depths[i]
+                #     if lidarmap[py, px] == 0 or lidarmap[py, px] > depth:
+                #         # for conflicts, use closer point
+                #         lidarmap[py, px] = depth
+                #         # lidarmap[py, px, 2] = 1 # mask
+                #         # lidarmap[py, px, 1] = pc_velo[i, 3]
+                #         # lidarmap[py, px, 2] = times[i]
+                dense_depths, confidences = depth_net.return_one_prediction(lidarmap*255, rgb, img_width, img_height)
+                input()
             if from_depth_prediction:
                 dense_depths = depth_net.return_one_prediction(img, post_process=False)
 

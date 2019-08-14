@@ -12,8 +12,8 @@ import cv2
 from PIL import Image
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'mayavi'))
-import kitti_util as utils
+# sys.path.append(os.path.join(ROOT_DIR, 'mayavi'))
+import kitti.kitti_util as utils
 
 try:
     raw_input          # Python 2
@@ -42,6 +42,26 @@ class kitti_object(object):
         self.calib_dir = os.path.join(self.split_dir, 'calib')
         self.lidar_dir = os.path.join(self.split_dir, 'velodyne')
         self.label_dir = os.path.join(self.split_dir, 'label_2')
+        with open(os.path.join(root_dir, 'devkit_object', 'mapping', 'train_rand.txt'), 'r') as f:
+            for line in f.readlines():
+                line = line.rstrip()
+                if len(line)==0: continue
+                random_mapping = np.array(line.split(','), np.int_)
+
+        drives = np.zeros_like(random_mapping, np.object)
+        days = np.zeros_like(random_mapping, np.object)
+        frames = np.zeros_like(random_mapping, np.object)
+        with open(os.path.join(root_dir, 'devkit_object', 'mapping', 'train_mapping.txt'), 'r') as f:
+            i=0
+            for line in f.readlines():
+                line = line.rstrip()
+                if len(line) == 0: continue
+                days[i], drives[i], frames[i] = line.split(' ')
+                i += 1
+
+        self.drives = drives[random_mapping-1]
+        self.days = days[random_mapping-1]
+        self.frames = frames[random_mapping-1]
 
     def __len__(self):
         return self.num_samples
@@ -71,6 +91,81 @@ class kitti_object(object):
 
     def get_top_down(self, idx):
         pass
+
+    def generate_depth_map(self, image_idx, cam=2, desired_image_width=None, desired_image_height=None, resize=True,
+                           vel_depth=False):
+        """Generate a depth map from velodyne data
+        Originally from monodepth2
+        """
+
+        kitti_raw_dir = os.path.join(ROOT_DIR, './../../data/kitti_raw')
+        calib_dir = day_dir = os.path.join(kitti_raw_dir, self.days[image_idx])
+        drive_dir = os.path.join(day_dir, self.drives[image_idx])
+        velo_filename = os.path.join(drive_dir, 'velodyne_points', 'data', self.frames[image_idx])+".bin"
+
+        # load calibration files
+        cam2cam = utils.Calibration.read_calib_file(None, os.path.join(calib_dir, 'calib_cam_to_cam.txt'))
+        velo2cam = utils.Calibration.read_calib_file(None, os.path.join(calib_dir, 'calib_velo_to_cam.txt'))
+        velo2cam = np.hstack((velo2cam['R'].reshape(3, 3), velo2cam['T'][..., np.newaxis]))
+        velo2cam = np.vstack((velo2cam, np.array([0, 0, 0, 1.0])))
+
+        # get image shape
+        im_shape = cam2cam["S_rect_02"][::-1].astype(np.int32)
+        if desired_image_width is None:
+            desired_image_width = im_shape[1]
+        if desired_image_height is None:
+            desired_image_height = im_shape[0]
+
+        # compute projection matrix velodyne->image plane
+        R_cam2rect = np.eye(4)
+        R_cam2rect[:3, :3] = cam2cam['R_rect_00'].reshape(3, 3)
+        P_rect = cam2cam['P_rect_0' + str(cam)].reshape(3, 4)
+        P_velo2im = np.dot(np.dot(P_rect, R_cam2rect), velo2cam)
+
+        # load velodyne points and remove all behind image plane (approximation)
+        # each row of the velodyne data is forward, left, up, reflectance
+        velo = load_velodyne_points(velo_filename)
+        velo = velo[velo[:, 0] >= 0, :]
+
+        # project the points to the camera
+        velo_pts_im = np.dot(P_velo2im, velo.T).T
+        velo_pts_im[:, :2] = velo_pts_im[:, :2] / velo_pts_im[:, 2][..., np.newaxis]
+
+        if vel_depth:
+            velo_pts_im[:, 2] = velo[:, 0]
+
+        # check if in bounds
+        # use minus 1 to get the exact same value as KITTI matlab code
+        if resize:
+            velo_pts_im[:, 0] = np.round(velo_pts_im[:, 0] * desired_image_width / im_shape[1])
+            velo_pts_im[:, 1] = np.round(velo_pts_im[:, 1] * desired_image_height / im_shape[0])
+        else:
+            # center crop
+            velo_pts_im[:, 0] = np.round(velo_pts_im[:, 0] + (desired_image_width - im_shape[1]) / 2)
+            velo_pts_im[:, 1] = np.round(velo_pts_im[:, 1] + (desired_image_height - im_shape[0]) / 2)
+
+        val_inds = (velo_pts_im[:, 0] >= 0) \
+                   & (velo_pts_im[:, 1] >= 0) \
+                   & (velo_pts_im[:, 0] < desired_image_width) \
+                   & (velo_pts_im[:, 1] < desired_image_height) \
+                   & (velo_pts_im[:, 2] > 0)  # positive depth
+        velo_pts_im = velo_pts_im[val_inds, :]
+
+        # project to image
+        sparse_depth_map = np.zeros((desired_image_height, desired_image_width), np.float)
+        for i in range(velo_pts_im.shape[0]):
+            px = int(velo_pts_im[i, 0])
+            py = int(velo_pts_im[i, 1])
+            depth = velo_pts_im[i, 2]
+            if sparse_depth_map[py, px] == 0 or sparse_depth_map[py, px] > depth:
+                # for conflicts, use closer point
+                sparse_depth_map[py, px] = depth
+                # lidarmap[py, px, 2] = 1 # mask
+                # lidarmap[py, px, 1] = pc_velo[i, 3]
+                # lidarmap[py, px, 2] = times[i]
+
+        return sparse_depth_map
+
 
 class kitti_object_video(object):
     ''' Load data for KITTI videos '''
@@ -222,6 +317,23 @@ def dataset_viz():
         # Show all LiDAR points. Draw 3d box in LiDAR point cloud
         show_lidar_with_boxes(pc_velo, objects, calib, True, img_width, img_height)
         raw_input()
+
+
+def load_velodyne_points(filename):
+    """Load 3D point cloud from KITTI file format
+    (adapted from https://github.com/hunse/kitti)
+    """
+    points = np.fromfile(filename, dtype=np.float32).reshape(-1, 4)
+    points[:, 3] = 1.0  # homogeneous
+    return points
+
+
+def sub2ind(matrixSize, rowSub, colSub):
+    """Convert row, col matrix subscripts to linear indices
+    """
+    m, n = matrixSize
+    return rowSub * (n-1) + colSub - 1
+
 
 if __name__=='__main__':
     import mayavi.mlab as mlab

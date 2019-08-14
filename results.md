@@ -136,3 +136,8 @@ predicted quantiles:  6.38  -  72.03
 rescaled predicted median: 13.87
 rescaled predicted quantiles:  6.38  -  72.03
 
+
+bis zu ca.2 % besser wenn testdaten zum early stopping verwendet werden würden
+hier nichts in die richtung verwendet, da keins der netze es bisher tut
+kein instanzbasierter loss
+

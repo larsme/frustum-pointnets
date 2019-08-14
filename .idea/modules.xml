@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/frustum-pointnets.iml" filepath="$PROJECT_DIR$/.idea/frustum-pointnets.iml" />
-      <module fileurl="file://$PROJECT_DIR$/../nconv/.idea/nconv.iml" filepath="$PROJECT_DIR$/../nconv/.idea/nconv.iml" />
     </modules>
   </component>
 </project>
