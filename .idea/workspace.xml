@@ -2,17 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="eb934e41-43d3-4685-a309-279245105d02" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/Pictures depth prediction/pic 2/depth_unguided_img_same_scale" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/conf_img" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/depth_img" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/depth_img_same_scale" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/img" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/lidar_img" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/kitti/kitti_object.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/kitti_object.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/kitti/prepare_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/prepare_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/command_prep_data.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_prep_data.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/command_train_v1.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_train_v1.sh" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />

@@ -532,11 +532,12 @@ def extract_frustum_data(split_file_datapath,
     assert use_depth_net or fill_n_points == -1
 
     if from_depth_completion:
-        sys.path.append(os.path.join(ROOT_DIR, '../nconv'))
-        from run_nconv_cnn import load_net
         if from_guided_depth_completion:
-            depth_net = load_net('exp_guided_nconv_cnn_l1', mode='bla', checkpoint_num=40, set_='bla')
+            bla = 0
+            # depth_net = load_net('exp_guided_nconv_cnn_l1', mode='bla', checkpoint_num=40, set_='bla')
         else: # from_unguided_depth_completion:
+            sys.path.append(os.path.join(ROOT_DIR, '../nconv'))
+            from run_nconv_cnn import load_net
             depth_net = load_net('exp_unguided_depth', mode='bla', checkpoint_num=3, set_='bla')
         desired_image_height = 352
         desired_image_width = 1216
@@ -564,7 +565,7 @@ def extract_frustum_data(split_file_datapath,
         image_pc_label_list.append(o_filler)
         image_box_detected_label_list.append(b_filler)
 
-    for image_idx in range(10):# image_idx_list:
+    for image_idx in image_idx_list:
         print('image idx: %d/%d' % \
               ( image_idx, dataset.num_samples))
         calib = dataset.get_calibration(image_idx)  # 3 by 4 matrix
@@ -642,7 +643,7 @@ def extract_frustum_data(split_file_datapath,
 
             dense_depths = []
             confidences = []
-            if from_depth_completion:
+            if from_unguided_depth_completion:
                 lidarmap = dataset.generate_depth_map(image_idx, 2, desired_image_width, desired_image_height)
                 rgb = Image.fromarray(img).resize((desired_image_width, desired_image_height), Image.LANCZOS)
                 rgb = np.array(rgb, dtype=np.float16)
@@ -659,8 +660,28 @@ def extract_frustum_data(split_file_datapath,
                 #         # lidarmap[py, px, 1] = pc_velo[i, 3]
                 #         # lidarmap[py, px, 2] = times[i]
                 dense_depths, confidences = depth_net.return_one_prediction(lidarmap*255, rgb, img_width, img_height)
-                input()
-            if from_depth_prediction:
+            elif from_guided_depth_completion:
+                res_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../data/completed_depth')
+                (dense_depths, confidences) = np.load(os.path.join(res_dir, str(image_idx)+'.npy'))
+
+                # import matplotlib.pyplot as plt
+                # cmap = plt.cm.get_cmap('nipy_spectral', 256)
+                # cmap = np.ndarray.astype(np.array([cmap(i) for i in range(256)])[:, :3] * 255, np.uint8)
+                #
+                # q1_lidar = np.quantile(dense_depths[dense_depths > 0], 0.05)
+                # q2_lidar = np.quantile(dense_depths[dense_depths > 0], 0.95)
+                # depth_img = cmap[
+                #             np.ndarray.astype(np.interp(dense_depths, (q1_lidar, q2_lidar), (0, 255)), np.int_),
+                #             :]  # depths
+                # fig = Image.fromarray(depth_img)
+                # fig.save('depth_img_computed', 'png')
+                # fig.show('depth_img_computed')
+                #
+                # fig = Image.fromarray(img)
+                # fig.save('img', 'png')
+                # fig.show('img')
+                # input()
+            elif from_depth_prediction:
                 dense_depths = depth_net.return_one_prediction(img, post_process=False)
 
             cache = [calib, pc_rect, pts_image_2d, img_height, img_width, img, pc_labels, dense_depths, confidences]
