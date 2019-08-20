@@ -2,7 +2,15 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="eb934e41-43d3-4685-a309-279245105d02" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/train/visualize.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/kitti/prepare_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/prepare_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/command_prep_data.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_prep_data.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/command_test_v1.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_test_v1.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/command_test_v2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_test_v2.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/command_train_v1.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_train_v1.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/command_train_v2.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_train_v2.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/train/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/train.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -24,11 +32,12 @@
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="PropertiesComponent">
     <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/train" />
     <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
   </component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/train" />
       <recent name="$PROJECT_DIR$" />
     </key>
   </component>

@@ -15,7 +15,7 @@ from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'models'))
+# sys.path.append(os.path.join(ROOT_DIR, 'models'))
 import provider
 from train_util import get_batch
 from mkdir_p import mkdir_p
@@ -556,7 +556,6 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
     image_prs = box_prs
     image_res = tp_sum.astype(np.float)/(tp_sum + image_fn_sum + epsilon)
 
-    image_any_fn_sum = box_fn_sum + TEST_DATASET.image_boxes_fn
     image_any_ious = np.sum(tp_sum).astype(np.float)/(np.sum(tp_sum + image_fn_sum + fp_sum) + epsilon)
     image_any_prs = box_any_prs
     image_any_res = np.sum(tp_sum).astype(np.float)/(np.sum(tp_sum + image_fn_sum) + epsilon)

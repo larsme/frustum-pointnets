@@ -852,6 +852,338 @@ def extract_frustum_data(split_file_datapath,
             input()
 
 
+def compare_source(split_file_datapath, split,
+                   type_whitelist=['Car'],
+                   from_rgb_detection=True,
+                   rgb_det_filename="",
+                   img_height_threshold=25,
+                   lidar_point_threshold=5,
+                   from_unguided_depth_completion=False,
+                   from_guided_depth_completion=False,
+                   from_depth_prediction=False):
+    ''' Extract point clouds in frustums extruded from 2D detection boxes.
+        Update: Lidar points and 3d boxes are in *rect camera* coord system
+            (as that in 3d box label files)
+
+    Input:
+        split_file_datapath: string, each line of the file is a image sample ID
+        split: string, either trianing or testing
+        output_filename: string, the name for output .pickle file
+        viz: bool, whether to visualize extracted data
+        perturb_box2d: bool, whether to perturb the box2d
+            (used for data augmentation in train set)
+        augment_x: scalar, how many augmentations to have for each 2D box (no augmentation => 1).
+        rgb_det_filename: string, each line is
+            img_path typeid confidence xmin ymin xmax ymax
+        type_whitelist: a list of strings, object types we are interested in.
+        img_height_threshold: int, neglect image with height lower than that.
+        lidar_point_threshold: int, neglect frustum with too few points.
+    Output:
+        None (will write a .pickle file to the disk)
+    '''
+
+    from_depth_completion = from_unguided_depth_completion or from_guided_depth_completion
+    use_depth_net = from_depth_completion or from_depth_prediction
+    assert int(from_guided_depth_completion) + int(from_unguided_depth_completion) + int(from_depth_prediction) <= 1
+    assert use_depth_net
+
+    if from_depth_completion:
+        if from_guided_depth_completion:
+            bla = 0
+            # depth_net = load_net('exp_guided_nconv_cnn_l1', mode='bla', checkpoint_num=40, set_='bla')
+        else: # from_unguided_depth_completion:
+            sys.path.append(os.path.join(ROOT_DIR, '../nconv'))
+            from run_nconv_cnn import load_net
+            depth_net = load_net('exp_unguided_depth', mode='bla', checkpoint_num=3, set_='bla')
+        desired_image_height = 352
+        desired_image_width = 1216
+    elif from_depth_prediction:
+        sys.path.append(os.path.join(ROOT_DIR, '../monodepth2'))
+        from monodepth_external import load_net
+        depth_net = load_net("mono+stereo_1024x320", use_cuda=True)
+
+    image_idx_list = [int(line.rstrip()) for line in open(split_file_datapath)]
+    dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
+
+    # image labels
+    image_pc_label_list = []
+    image_box_detected_label_list = []
+
+    if not from_rgb_detection:
+        det_box_image_index_list = []
+        det_box_class_list = []
+        det_box_geometry_list = []
+        det_box_certainty_list = []
+
+    o_filler = np.zeros(0, np.object)
+    b_filler = np.zeros(0, np.bool_)
+    for image_idx in range(dataset.num_samples):
+        image_pc_label_list.append(o_filler)
+        image_box_detected_label_list.append(b_filler)
+
+    for image_idx in image_idx_list:
+        print('image idx: %d/%d' % (image_idx, dataset.num_samples))
+
+        calib = dataset.get_calibration(image_idx)  # 3 by 4 matrix
+
+        pc_velo = dataset.get_lidar(image_idx)
+        pc_rect = np.zeros_like(pc_velo)
+        pc_rect[:, 0:3] = calib.project_velo_to_rect(pc_velo[:, 0:3])
+        pc_rect[:, 3] = pc_velo[:, 3]
+
+        img = dataset.get_image(image_idx)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_height, img_width, img_channel = img.shape
+        _, _, img_fov_inds, _ = get_lidar_in_image_fov( \
+            pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
+        pc_rect = pc_rect[img_fov_inds, :]
+
+        label_objects = dataset.get_label_objects(image_idx)
+        pc_labels = np.zeros((np.size(pc_rect, 0)), np.object)
+        for label_object in label_objects:
+            _, box3d_pts_3d = utils.compute_box_3d(label_object, calib.P)
+            _, instance_pc_indexes = extract_pc_in_box3d(pc_rect, box3d_pts_3d)
+            overlapping_3d_boxes = np.nonzero(pc_labels[instance_pc_indexes])[0]
+            pc_labels[instance_pc_indexes] = label_object.type
+            (pc_labels[instance_pc_indexes])[overlapping_3d_boxes] = 'DontCare'
+            if not from_rgb_detection and label_object.type in type_whitelist:
+                det_box_geometry_list.append(label_object.box2d)
+                det_box_certainty_list.append(1)
+                det_box_class_list.append(label_object.type)
+                det_box_image_index_list.append(image_idx)
+
+        image_pc_label_list[image_idx] = pc_labels
+        image_box_detected_label_list[image_idx] = np.zeros(pc_labels.shape[0], np.bool_)
+
+    if from_rgb_detection:
+        det_box_image_index_list, det_box_class_list, det_box_geometry_list, det_box_certainty_list = \
+            read_box_file(rgb_det_filename)
+
+    cache_id = -1
+    cache = None
+
+    box_class_list = []
+    pc_in_box_label_list = []
+    alt_pc_in_box_label_list = []
+    box_image_id_list = []
+
+    for box_idx in range(len(det_box_image_index_list)):
+        image_idx = det_box_image_index_list[box_idx]
+        print('box idx: %d/%d, image idx: %d' % \
+              (box_idx, len(det_box_image_index_list), image_idx))
+        if cache_id != image_idx:
+            calib = dataset.get_calibration(image_idx)  # 3 by 4 matrix
+
+            pc_velo = dataset.get_lidar(image_idx)
+            pc_rect = np.zeros_like(pc_velo)
+            pc_rect[:, 0:3] = calib.project_velo_to_rect(pc_velo[:, 0:3])
+            pc_rect[:, 3] = pc_velo[:, 3]
+
+            img = dataset.get_image(image_idx)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img_height, img_width, img_channel = img.shape
+
+            _, pts_image_2d, img_fov_inds, pc_image_depths = get_lidar_in_image_fov( \
+                pc_velo[:, 0:3], calib, 0, 0, img_width, img_height, True)
+            pc_rect = pc_rect[img_fov_inds, :]
+            pts_image_2d = np.ndarray.astype(np.round(pts_image_2d[img_fov_inds, :]), int)
+            pts_image_2d[pts_image_2d < 0] = 0
+            pts_image_2d[pts_image_2d[:, 0] >= img_width, 0] = img_width-1
+            pts_image_2d[pts_image_2d[:, 1] >= img_height, 1] = img_height-1
+            pc_labels = image_pc_label_list[image_idx]
+
+            dense_depths = []
+            if from_unguided_depth_completion:
+                lidarmap = dataset.generate_depth_map(image_idx, 2, desired_image_width, desired_image_height)
+                rgb = Image.fromarray(img).resize((desired_image_width, desired_image_height), Image.LANCZOS)
+                rgb = np.array(rgb, dtype=np.float16)
+                dense_depths, confidences = depth_net.return_one_prediction(lidarmap*255, rgb, img_width, img_height)
+            elif from_guided_depth_completion:
+                res_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../data/completed_depth')
+                (dense_depths, confidences) = np.load(os.path.join(res_dir, str(image_idx)+'.npy'))
+            elif from_depth_prediction:
+                dense_depths = depth_net.return_one_prediction(img, post_process=False)
+
+            depths_in_box = dense_depths[pts_image_2d[:, 1], pts_image_2d[:, 0]]
+            alt_pc = np.concatenate((np.ndarray.astype(np.expand_dims(pts_image_2d[:, 0], 1), np.float),
+                                      np.ndarray.astype(np.expand_dims(pts_image_2d[:, 1], 1), np.float),
+                                      np.expand_dims(depths_in_box, 1)), axis=1)
+
+            alt_pc_labels = np.zeros((np.size(pc_rect, 0)), np.object)
+            for label_object in dataset.get_label_objects(image_idx):
+                _, box3d_pts_3d = utils.compute_box_3d(label_object, calib.P)
+                _, instance_pc_indexes = extract_pc_in_box3d(alt_pc, box3d_pts_3d)
+                overlapping_3d_boxes = np.nonzero(pc_labels[instance_pc_indexes])[0]
+                alt_pc_labels[instance_pc_indexes] = label_object.type
+                (alt_pc_labels[instance_pc_indexes])[overlapping_3d_boxes] = 'DontCare'
+
+            cache = [pts_image_2d, pc_labels, alt_pc_labels]
+            cache_id = image_idx
+        else:
+            pts_image_2d, pc_labels, alt_pc_labels = cache
+
+
+        if det_box_class_list[box_idx] not in type_whitelist:
+            continue
+
+        xmin, ymin, xmax, ymax = det_box_geometry_list[box_idx]
+
+        box_fov_inds = (pts_image_2d[:, 0] < xmax) & \
+                       (pts_image_2d[:, 0] >= xmin) & \
+                       (pts_image_2d[:, 1] < ymax) & \
+                       (pts_image_2d[:, 1] >= ymin)
+        pc_in_box_count = np.count_nonzero(box_fov_inds)
+
+        # Pass objects that are too small
+        if ymax - ymin < img_height_threshold or \
+                pc_in_box_count < lidar_point_threshold:
+            continue
+
+        image_box_detected_label_list[image_idx][box_fov_inds] = True
+
+        pc_in_box_labels = np.zeros((pc_in_box_count), np.int_)
+        pc_in_box_labels[pc_labels[box_fov_inds] == det_box_class_list[box_idx]] = 1
+        pc_in_box_labels[pc_labels[box_fov_inds] == 'DontCare'] = -1
+
+        alt_pc_in_box_labels = np.zeros((pc_in_box_count), np.int_)
+        alt_pc_in_box_labels[pc_labels[box_fov_inds] == det_box_class_list[box_idx]] = 1
+        alt_pc_in_box_labels[pc_labels[box_fov_inds] == 'DontCare'] = -1
+
+        box_class_list.append(det_box_class_list[box_idx])
+        pc_in_box_label_list.append(pc_in_box_labels)
+        alt_pc_in_box_label_list.append(alt_pc_in_box_labels)
+        box_image_id_list.append(image_idx)
+
+    fn = np.zeros((len(type_whitelist)), np.int_)
+    for image_idx in image_idx_list:
+        undetected_labels = image_pc_label_list[image_idx][
+            np.logical_not(image_box_detected_label_list[image_idx][:])]
+        for type_idx in range(len(type_whitelist)):
+            fn += np.count_nonzero(undetected_labels == type_whitelist[type_idx])
+
+    # evaluate
+    NUM_CLASSES = 2
+    NUM_REAL_CLASSES = len(type_whitelist)
+
+    # To collect statistics
+    loss_sum = 0
+    total_seen_class = [0 for _ in range(NUM_CLASSES)]
+    total_correct_class = [0 for _ in range(NUM_CLASSES)]
+
+    epsilon = 1e-12
+
+    # box class-level metrics
+    tp_sum = np.zeros(NUM_REAL_CLASSES)
+    box_fn_sum = np.zeros(NUM_REAL_CLASSES)
+    fp_sum = np.zeros(NUM_REAL_CLASSES)
+    tn_sum = np.zeros(NUM_REAL_CLASSES)
+
+    # box instance-level metrics
+    iiou_sum = np.zeros(NUM_REAL_CLASSES)
+    ire_sum = np.zeros(NUM_REAL_CLASSES)
+    ipr_sum = np.zeros(NUM_REAL_CLASSES)
+    i_sum = np.zeros(NUM_REAL_CLASSES)
+
+    for box_idx in range(len(pc_in_box_label_list)):
+        labels = pc_in_box_label_list[box_idx]
+        alt_labels = alt_pc_in_box_label_list[box_idx]
+        box_class = type_whitelist.index(box_class_list[box_idx])
+
+        for l in range(NUM_CLASSES):
+            total_seen_class[l] += np.sum(labels == l)
+            total_correct_class[l] += (np.sum((alt_labels == l) & (labels == l)))
+
+        icare = labels != -1
+
+        tps = np.sum(labels * alt_labels * icare)
+        fns = np.sum(labels * (1 - alt_labels) * icare)
+        fps = np.sum((1 - labels) * alt_labels * icare)
+        tns = np.sum((1 - labels) * (1 - alt_labels) * icare)
+
+        iiou = tps.astype(np.float) / (tps + fns + fps + epsilon)
+        ipr = tps.astype(np.float) / (tps + fps + epsilon)
+        ire = tps.astype(np.float) / (tps + fns + epsilon)
+
+        iiou_sum[box_class] += iiou
+        ire_sum[box_class] += ire
+        ipr_sum[box_class] += ipr
+        i_sum[box_class] += 1
+
+        tp_sum[box_class] += tps
+        box_fn_sum[box_class] += fns
+        fp_sum[box_class] += fps
+        tn_sum[box_class] += tns
+
+    print('eval mean loss: %f' % (loss_sum / np.sum(i_sum)))
+    print('eval segmentation accuracy: %f' % (float(np.sum(tp_sum + tn_sum)) /
+                                              (float(np.sum(tp_sum + box_fn_sum + fp_sum + tn_sum)) + epsilon)))
+    print('eval segmentation avg class acc: %f' % np.mean((tp_sum + tn_sum).astype(np.float)
+                                                               / (tp_sum + box_fn_sum + fp_sum + tn_sum + epsilon)))
+
+    box_ious = tp_sum.astype(np.float) / (tp_sum + box_fn_sum + fp_sum + epsilon)
+    box_prs = tp_sum.astype(np.float) / (tp_sum + fp_sum + epsilon)
+    box_res = tp_sum.astype(np.float) / (tp_sum + box_fn_sum + epsilon)
+
+    box_any_ious = np.sum(tp_sum).astype(np.float) / (np.sum(tp_sum + box_fn_sum + fp_sum) + epsilon)
+    box_any_prs = np.sum(tp_sum).astype(np.float) / (np.sum(tp_sum + fp_sum) + epsilon)
+    box_any_res = np.sum(tp_sum).astype(np.float) / (np.sum(tp_sum + box_fn_sum) + epsilon)
+
+    iious = iiou_sum.astype(np.float) / (i_sum + epsilon)
+    iprs = ipr_sum.astype(np.float) / (i_sum + epsilon)
+    ires = ire_sum.astype(np.float) / (i_sum + epsilon)
+
+    iious_any = np.sum(iiou_sum).astype(np.float) / (np.sum(i_sum) + epsilon)
+    iprs_any = np.sum(ipr_sum).astype(np.float) / (np.sum(i_sum) + epsilon)
+    ires_any = np.sum(ire_sum).astype(np.float) / (np.sum(i_sum) + epsilon)
+
+    # image class-level metrics
+    image_fn_sum = box_fn_sum + fn
+    image_ious = tp_sum.astype(np.float) / (tp_sum + image_fn_sum + fp_sum + epsilon)
+    image_prs = box_prs
+    image_res = tp_sum.astype(np.float) / (tp_sum + image_fn_sum + epsilon)
+
+    image_any_ious = np.sum(tp_sum).astype(np.float) / (np.sum(tp_sum + image_fn_sum + fp_sum) + epsilon)
+    image_any_prs = box_any_prs
+    image_any_res = np.sum(tp_sum).astype(np.float) / (np.sum(tp_sum + image_fn_sum) + epsilon)
+
+    for class_idx in range(NUM_REAL_CLASSES):
+        print()
+        print(type_whitelist[class_idx])
+        print('Box_IOU %d' % box_ious[class_idx])
+        print('Box_Precision %d' % box_prs[class_idx])
+        print('Box_Recall %d' % box_res[class_idx])
+        print('Box_iIOU %d' % iious[class_idx])
+        print('Box_iPrecision %d' % iprs[class_idx])
+        print('Box_iRecall %d' % ires[class_idx])
+        print('Image_IOU %d' % image_ious[class_idx])
+        print('Image_Precision %d' % image_prs[class_idx])
+        print('Image_Recall %d' % image_res[class_idx])
+
+    print()
+    print('Mean Class')
+    print('Box_IOU %d' % np.mean(box_ious))
+    print('Box_Precision %d' % np.mean(box_prs))
+    print('Box_Recall %d' % np.mean(box_res))
+    print('Box_iIOU %d' % np.mean(iious))
+    print('Box_iPrecision %d' % np.mean(iprs))
+    print('Box_iRecall %d' % np.mean(ires))
+    print('Image_IOU %d' % np.mean(image_ious))
+    print('Image_Precision %d' % np.mean(image_prs))
+    print('Image_Recall %d' % np.mean(image_res))
+
+    print()
+    print('Class Any')
+    print('Box_IOU %d' % np.mean(box_any_ious))
+    print('Box_Precision %d' % np.mean(box_any_prs))
+    print('Box_Recall %d' % np.mean(box_any_res))
+    print('Box_iIOU %d' % np.mean(iious_any))
+    print('Box_iPrecision %d' % np.mean(iprs_any))
+    print('Box_iRecall %d' % np.mean(ires_any))
+    print('Image_IOU %d' % np.mean(image_any_ious))
+    print('Image_Precision %d' % np.mean(image_any_prs))
+    print('Image_Recall %d' % np.mean(image_any_res))
+
+
 def write_2d_rgb_detection(det_filename, split, result_dir):
     ''' Write 2D detection results for KITTI evaluation.
         Convert from Wei's format to KITTI format. 
@@ -894,17 +1226,30 @@ def write_2d_rgb_detection(det_filename, split, result_dir):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--demo', action='store_true', help='Run demo.')
-    parser.add_argument('--gen_train', action='store_true', help='Generate train split frustum data with perturbed GT 2D boxes')
-    parser.add_argument('--gen_train_rgb_detection', action='store_true', help='Generate train split frustum data with RGB detection 2D boxes')
-    parser.add_argument('--gen_val', action='store_true', help='Generate val split frustum data with GT 2D boxes')
-    parser.add_argument('--gen_val_rgb_detection', action='store_true', help='Generate val split frustum data with RGB detection 2D boxes')
-    parser.add_argument('--show_pixel_statistics', action='store_true', help='Show Pixel Statistics')
-    parser.add_argument('--car_only', action='store_true', help='Only generate cars; otherwise cars, peds and cycs')
-    parser.add_argument('--from_unguided_depth_completion', action='store_true', help='Use point cloud from unguided depth completion')
-    parser.add_argument('--from_guided_depth_completion', action='store_true', help='Use point cloud from guided depth completion')
-    parser.add_argument('--from_depth_prediction', action='store_true', help='Use point cloud from depth prediction')
-    parser.add_argument('--fill_n_points', type=int, default=-1, help='Fill x points with depth completion / prediction, -1 = use all')
+    parser.add_argument('--demo', action='store_true',
+                        help='Run demo.')
+    parser.add_argument('--gen_train', action='store_true',
+                        help='Generate train split frustum data with perturbed GT 2D boxes')
+    parser.add_argument('--gen_train_rgb_detection', action='store_true',
+                        help='Generate train split frustum data with RGB detection 2D boxes')
+    parser.add_argument('--gen_val', action='store_true',
+                        help='Generate val split frustum data with GT 2D boxes')
+    parser.add_argument('--gen_val_rgb_detection', action='store_true',
+                        help='Generate val split frustum data with RGB detection 2D boxes')
+    parser.add_argument('--show_pixel_statistics', action='store_true',
+                        help='Show Pixel Statistics')
+    parser.add_argument('--show_alt_depth_source_seg_statistics', action='store_true',
+                        help='Show Segmentation Statistics with ideal boxes and alternate depth source')
+    parser.add_argument('--car_only', action='store_true',
+                        help='Only generate cars; otherwise cars, peds and cycs')
+    parser.add_argument('--from_unguided_depth_completion', action='store_true',
+                        help='Use point cloud from unguided depth completion')
+    parser.add_argument('--from_guided_depth_completion', action='store_true',
+                        help='Use point cloud from guided depth completion')
+    parser.add_argument('--from_depth_prediction', action='store_true',
+                        help='Use point cloud from depth prediction')
+    parser.add_argument('--fill_n_points', type=int, default=-1,
+                        help='Fill x points with depth completion / prediction, -1 = use all')
     args = parser.parse_args()
 
     if args.demo:
@@ -925,84 +1270,130 @@ if __name__=='__main__':
     if args.from_depth_prediction:
         output_prefix += 'prediction_'
 
-    if args.gen_val:
-        extract_frustum_data(\
-            os.path.join(BASE_DIR, 'image_sets/val.txt'),
-            'training',
-            os.path.join(BASE_DIR, output_prefix+'val.pickle'),
-            viz=False, perturb_box2d=False, augment_x=1,
-            type_whitelist=type_whitelist,
-            from_guided_depth_completion=args.from_guided_depth_completion,
-            from_unguided_depth_completion=args.from_unguided_depth_completion,
-            from_depth_prediction=args.from_depth_prediction,
-            from_rgb_detection=False)
+    if not args.show_alt_depth_source_seg_statistics:
+        if args.gen_val:
+            extract_frustum_data(
+                os.path.join(BASE_DIR, 'image_sets/val.txt'),
+                'training',
+                os.path.join(BASE_DIR, output_prefix+'val.pickle'),
+                viz=False, perturb_box2d=False, augment_x=1,
+                type_whitelist=type_whitelist,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction,
+                from_rgb_detection=False,
+                fill_n_points=args.fill_n_points)
 
-    if args.gen_val_rgb_detection:
-        extract_frustum_data(\
-            os.path.join(BASE_DIR, 'image_sets/val.txt'),
-            'training',
-            os.path.join(BASE_DIR, output_prefix+'val_rgb_detection.pickle'),
-            viz=False, perturb_box2d=False, augment_x=1,
-            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
-            type_whitelist=type_whitelist,
-            from_rgb_detection=True,
-            from_guided_depth_completion=args.from_guided_depth_completion,
-            from_unguided_depth_completion=args.from_unguided_depth_completion,
-            from_depth_prediction=args.from_depth_prediction,
-            fill_n_points=args.fill_n_points)
+        if args.gen_val_rgb_detection:
+            extract_frustum_data(
+                os.path.join(BASE_DIR, 'image_sets/val.txt'),
+                'training',
+                os.path.join(BASE_DIR, output_prefix+'val_rgb_detection.pickle'),
+                viz=False, perturb_box2d=False, augment_x=1,
+                rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
+                type_whitelist=type_whitelist,
+                from_rgb_detection=True,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction,
+                fill_n_points=args.fill_n_points)
 
-    if args.gen_train:
-        extract_frustum_data(\
-            os.path.join(BASE_DIR, 'image_sets/train.txt'),
-            'training',
-            os.path.join(BASE_DIR, output_prefix+'train.pickle'),
-            viz=False, perturb_box2d=True, augment_x=5,
-            type_whitelist=type_whitelist,
-            from_guided_depth_completion=args.from_guided_depth_completion,
-            from_unguided_depth_completion=args.from_unguided_depth_completion,
-            from_depth_prediction=args.from_depth_prediction,
-            from_rgb_detection=False)
+        if args.gen_train:
+            extract_frustum_data(
+                os.path.join(BASE_DIR, 'image_sets/train.txt'),
+                'training',
+                os.path.join(BASE_DIR, output_prefix+'train.pickle'),
+                viz=False, perturb_box2d=True, augment_x=5,
+                type_whitelist=type_whitelist,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction,
+                from_rgb_detection=False,
+                fill_n_points=args.fill_n_points)
 
-    if args.gen_train_rgb_detection:
-        extract_frustum_data(\
-            os.path.join(BASE_DIR, 'image_sets/train.txt'),
-            'training',
-            os.path.join(BASE_DIR, output_prefix+'train_rgb_detection.pickle'),
-            viz=False, perturb_box2d=False, augment_x=1,
-            rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
-            type_whitelist=type_whitelist,
-            from_rgb_detection=True,
-            from_guided_depth_completion=args.from_guided_depth_completion,
-            from_unguided_depth_completion=args.from_unguided_depth_completion,
-            from_depth_prediction=args.from_depth_prediction,
-            fill_n_points=args.fill_n_points)
+        if args.gen_train_rgb_detection:
+            extract_frustum_data(
+                os.path.join(BASE_DIR, 'image_sets/train.txt'),
+                'training',
+                os.path.join(BASE_DIR, output_prefix+'train_rgb_detection.pickle'),
+                viz=False, perturb_box2d=False, augment_x=1,
+                rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
+                type_whitelist=type_whitelist,
+                from_rgb_detection=True,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction,
+                fill_n_points=args.fill_n_points)
 
     if args.show_pixel_statistics:
-        show_points_per_box_statistics( \
+        show_points_per_box_statistics(
             os.path.join(BASE_DIR, 'image_sets/val.txt'),
             'training',
             'rgb_detection val',
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=True)
-        show_points_per_box_statistics( \
+        show_points_per_box_statistics(
             os.path.join(BASE_DIR, 'image_sets/val.txt'),
             'training',
             'ideal boxes val',
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=False)
-        show_points_per_box_statistics( \
+        show_points_per_box_statistics(
             os.path.join(BASE_DIR, 'image_sets/train.txt'),
             'training',
             'rgb_detection train',
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=True)
-        show_points_per_box_statistics( \
+        show_points_per_box_statistics(
             os.path.join(BASE_DIR, 'image_sets/train.txt'),
             'training',
             'ideal boxes train',
             rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
             type_whitelist=type_whitelist,
             from_rgb_detection=False)
+
+    if args.show_alt_depth_source_seg_statistics:
+        if args.gen_val:
+            compare_source(
+                os.path.join(BASE_DIR, 'image_sets/val.txt'),
+                'training',
+                type_whitelist=type_whitelist,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction,
+                from_rgb_detection=False)
+
+        if args.gen_val_rgb_detection:
+            compare_source(
+                os.path.join(BASE_DIR, 'image_sets/val.txt'),
+                'training',
+                rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_val.txt'),
+                type_whitelist=type_whitelist,
+                from_rgb_detection=True,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction)
+
+        if args.gen_train:
+            compare_source(
+                os.path.join(BASE_DIR, 'image_sets/train.txt'),
+                'training',
+                type_whitelist=type_whitelist,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction,
+                from_rgb_detection=False)
+
+        if args.gen_train_rgb_detection:
+            compare_source(
+                os.path.join(BASE_DIR, 'image_sets/train.txt'),
+                'training',
+                rgb_det_filename=os.path.join(BASE_DIR, 'rgb_detections/rgb_detection_train.txt'),
+                type_whitelist=type_whitelist,
+                from_rgb_detection=True,
+                from_guided_depth_completion=args.from_guided_depth_completion,
+                from_unguided_depth_completion=args.from_unguided_depth_completion,
+                from_depth_prediction=args.from_depth_prediction)
