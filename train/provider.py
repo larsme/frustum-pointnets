@@ -12,12 +12,13 @@ import os
 import numpy as np
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
-sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(ROOT_DIR,'models'))
-from box_util import box3d_iou
-from model_util import g_type2class, g_class2type, g_type2onehotclass
-from model_util import g_type_mean_size
-from model_util import NUM_HEADING_BIN, NUM_SIZE_CLUSTER
+if BASE_DIR in sys.path:
+   sys.path.remove(BASE_DIR)
+sys.path.append(ROOT_DIR)
+from train.box_util import box3d_iou
+from models.model_util import g_type2class, g_class2type, g_type2onehotclass
+from models.model_util import g_type_mean_size
+from models.model_util import NUM_HEADING_BIN, NUM_SIZE_CLUSTER
 
 try:
     raw_input          # Python 2

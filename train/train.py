@@ -14,105 +14,25 @@ import tensorflow as tf
 from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
-sys.path.append(BASE_DIR)
+if BASE_DIR in sys.path:
+    sys.path.remove(BASE_DIR)
+sys.path.append(ROOT_DIR)
 # sys.path.append(os.path.join(ROOT_DIR, 'models'))
-import provider
-from train_util import get_batch
-from mkdir_p import mkdir_p
+import train.provider as provider
+from train.train_util import get_batch
+from train.mkdir_p import mkdir_p
 
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
-parser.add_argument('--model', default='frustum_pointnets_v1', help='Model name [default: frustum_pointnets_v1]')
-parser.add_argument('--log_dir', default='log', help='Log dir [default: log]')
-parser.add_argument('--num_point', type=int, default=2048, help='Point Number [default: 2048]')
-parser.add_argument('--max_epoch', type=int, default=201, help='Epoch to run [default: 201]')
-parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
-parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
-parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
-parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
-parser.add_argument('--decay_step', type=int, default=200000, help='Decay step for lr decay [default: 200000]')
-parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
-parser.add_argument('--with_intensity', action='store_true', help='Use Intensity for training')
-parser.add_argument('--with_colors', action='store_true', help='Use Colors for training')
-parser.add_argument('--with_depth_confidences', action='store_true', help='Use depth completion confidences')
-parser.add_argument('--from_guided_depth_completion', action='store_true', help='Use point cloud from depth completion')
-parser.add_argument('--from_unguided_depth_completion', action='store_true',
-                    help='Use point cloud from unguided depth completion')
-parser.add_argument('--from_depth_prediction', action='store_true', help='Use point cloud from depth prediction')
-parser.add_argument('--restore_model_path', default=None, help='Restore model path e.g. log/model.ckpt [default: None]')
-parser.add_argument('--dont_input_box_probabilities', action='store_true', help='Use box probabilities as net inputs')
-parser.add_argument('--avoid_point_duplicates', action='store_true', help='Try to avoid point duplicates when sampling')
-FLAGS = parser.parse_args()
-
-
-# Set training configurations
 EPOCH_CNT = 0
-BATCH_SIZE = FLAGS.batch_size
-NUM_POINT = FLAGS.num_point
-MAX_EPOCH = FLAGS.max_epoch
-BASE_LEARNING_RATE = FLAGS.learning_rate
-GPU_INDEX = FLAGS.gpu
-MOMENTUM = FLAGS.momentum
-OPTIMIZER = FLAGS.optimizer
-DECAY_STEP = FLAGS.decay_step
-DECAY_RATE = FLAGS.decay_rate
-NUM_CHANNEL = 3 # point feature channel
-if FLAGS.with_intensity:
-    NUM_CHANNEL = NUM_CHANNEL + 1
-if FLAGS.with_depth_confidences:
-    NUM_CHANNEL = NUM_CHANNEL + 1
-if FLAGS.with_colors:
-    NUM_CHANNEL = NUM_CHANNEL + 3
-NUM_CLASSES = 2 # segmentation net has two classes
-
+NUM_CLASSES = 2  # segmentation net has two classes
 NUM_REAL_CLASSES = 3
 REAL_CLASSES = ['Car', 'Pedestrian', 'Cyclist']
-
-
-
-#Load Frustum Datasets. Use default data paths
-print('--- Loading Training Dataset ---')
-TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classes=REAL_CLASSES,
-                                        random_flip=True, random_shift=False,
-                                        rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
-                                        with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
-                                        with_depth_confidences=FLAGS.with_depth_confidences,
-                                        from_guided_depth_completion=FLAGS.from_guided_depth_completion,
-                                        from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
-                                        from_depth_prediction=FLAGS.from_depth_prediction,
-                                        segment_all_points=False, avoid_duplicates=FLAGS.avoid_point_duplicates)
-print('--- Loading Testing Dataset ---')
-TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
-                                       random_flip=False, random_shift=False,
-                                       rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
-                                       with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
-                                       with_depth_confidences=FLAGS.with_depth_confidences,
-                                       from_guided_depth_completion=FLAGS.from_guided_depth_completion,
-                                       from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
-                                       from_depth_prediction=FLAGS.from_depth_prediction,
-                                       segment_all_points=True, avoid_duplicates=FLAGS.avoid_point_duplicates)
-
-print('--- Loading Model ---')
-MODEL = importlib.import_module(FLAGS.model) # import network module
-MODEL_FILE = os.path.join(ROOT_DIR, 'models', FLAGS.model+'.py')
-LOG_DIR = FLAGS.log_dir
-if not os.path.isdir(LOG_DIR):
-    mkdir_p(LOG_DIR)
-os.system('cp %s %s' % (MODEL_FILE, LOG_DIR)) # bkp of model def
-os.system('cp %s %s' % (os.path.join(BASE_DIR, 'train.py'), LOG_DIR))
-LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'w')
-LOG_FOUT.write(str(FLAGS)+'\n')
-
-
-
 BN_INIT_DECAY = 0.5
 BN_DECAY_DECAY_RATE = 0.5
-BN_DECAY_DECAY_STEP = float(DECAY_STEP)
 BN_DECAY_CLIP = 0.99
 
-
-
+FLAGS = BATCH_SIZE = NUM_POINT = MAX_EPOCH = BASE_LEARNING_RATE = GPU_INDEX = MOMENTUM = OPTIMIZER \
+    = DECAY_STEP = DECAY_RATE = NUM_CHANNEL = TRAIN_DATASET = TEST_DATASET = MODEL = MODEL_FILE = LOG_DIR = LOG_FOUT \
+    = BN_DECAY_DECAY_STEP = 0
 
 def log_string(out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -140,7 +60,93 @@ def get_bn_decay(batch):
     return bn_decay
 
 def train():
+    global FLAGS, BATCH_SIZE, NUM_POINT, MAX_EPOCH, BASE_LEARNING_RATE, GPU_INDEX, MOMENTUM, OPTIMIZER, \
+        DECAY_STEP, DECAY_RATE, NUM_CHANNEL, TRAIN_DATASET, TEST_DATASET, MODEL, MODEL_FILE, LOG_DIR, LOG_FOUT, \
+        BN_DECAY_DECAY_STEP
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
+    parser.add_argument('--model', default='frustum_pointnets_v1', help='Model name [default: frustum_pointnets_v1]')
+    parser.add_argument('--log_dir', default='log', help='Log dir [default: log]')
+    parser.add_argument('--num_point', type=int, default=2048, help='Point Number [default: 2048]')
+    parser.add_argument('--max_epoch', type=int, default=201, help='Epoch to run [default: 201]')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
+    parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
+    parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
+    parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
+    parser.add_argument('--decay_step', type=int, default=200000, help='Decay step for lr decay [default: 200000]')
+    parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
+    parser.add_argument('--with_intensity', action='store_true', help='Use Intensity for training')
+    parser.add_argument('--with_colors', action='store_true', help='Use Colors for training')
+    parser.add_argument('--with_depth_confidences', action='store_true', help='Use depth completion confidences')
+    parser.add_argument('--from_guided_depth_completion', action='store_true',
+                        help='Use point cloud from depth completion')
+    parser.add_argument('--from_unguided_depth_completion', action='store_true',
+                        help='Use point cloud from unguided depth completion')
+    parser.add_argument('--from_depth_prediction', action='store_true', help='Use point cloud from depth prediction')
+    parser.add_argument('--restore_model_path', default=None,
+                        help='Restore model path e.g. log/model.ckpt [default: None]')
+    parser.add_argument('--dont_input_box_probabilities', action='store_true',
+                        help='Use box probabilities as net inputs')
+    parser.add_argument('--avoid_point_duplicates', action='store_true',
+                        help='Try to avoid point duplicates when sampling')
+    FLAGS = parser.parse_args()
+
+    # Set training configurations
+    BATCH_SIZE = FLAGS.batch_size
+    NUM_POINT = FLAGS.num_point
+    MAX_EPOCH = FLAGS.max_epoch
+    BASE_LEARNING_RATE = FLAGS.learning_rate
+    GPU_INDEX = FLAGS.gpu
+    MOMENTUM = FLAGS.momentum
+    OPTIMIZER = FLAGS.optimizer
+    DECAY_STEP = FLAGS.decay_step
+    DECAY_RATE = FLAGS.decay_rate
+    NUM_CHANNEL = 3  # point feature channel
+    if FLAGS.with_intensity:
+        NUM_CHANNEL = NUM_CHANNEL + 1
+    if FLAGS.with_depth_confidences:
+        NUM_CHANNEL = NUM_CHANNEL + 1
+    if FLAGS.with_colors:
+        NUM_CHANNEL = NUM_CHANNEL + 3
+
+
+    # Load Frustum Datasets. Use default data paths
+    print('--- Loading Training Dataset ---')
+    TRAIN_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='train', classes=REAL_CLASSES,
+                                            random_flip=True, random_shift=False,
+                                            rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
+                                            with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
+                                            with_depth_confidences=FLAGS.with_depth_confidences,
+                                            from_guided_depth_completion=FLAGS.from_guided_depth_completion,
+                                            from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
+                                            from_depth_prediction=FLAGS.from_depth_prediction,
+                                            segment_all_points=False, avoid_duplicates=FLAGS.avoid_point_duplicates)
+    print('--- Loading Testing Dataset ---')
+    TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
+                                           random_flip=False, random_shift=False,
+                                           rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
+                                           with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
+                                           with_depth_confidences=FLAGS.with_depth_confidences,
+                                           from_guided_depth_completion=FLAGS.from_guided_depth_completion,
+                                           from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
+                                           from_depth_prediction=FLAGS.from_depth_prediction,
+                                           segment_all_points=True, avoid_duplicates=FLAGS.avoid_point_duplicates)
+
+    print('--- Loading Model ---')
+    MODEL = importlib.import_module(FLAGS.model)  # import network module
+    MODEL_FILE = os.path.join(ROOT_DIR, 'models', FLAGS.model + '.py')
+    LOG_DIR = FLAGS.log_dir
+    if not os.path.isdir(LOG_DIR):
+        mkdir_p(LOG_DIR)
+    os.system('cp %s %s' % (MODEL_FILE, LOG_DIR))  # bkp of model def
+    os.system('cp %s %s' % (os.path.join(BASE_DIR, 'train.py'), LOG_DIR))
+    LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'w')
+    LOG_FOUT.write(str(FLAGS) + '\n')
+
+    BN_DECAY_DECAY_STEP = float(DECAY_STEP)
+
+    log_string('pid: %s'%(str(os.getpid())))
 
     ''' Main function for training and simple evaluation. '''
     with tf.Graph().as_default():
@@ -433,9 +439,6 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
         epoch_boxes_points_idxs_left_to_sample.append(range(np.size(TEST_DATASET.pc_in_box_list[i], 0)))
 
     while len(epoch_boxes_left_to_sample) > 0:
-        new_epoch_boxes_left_to_sample = []
-        new_epoch_boxes_points_idxs_left_to_sample = []
-
         num_batches = int(np.ceil(len(epoch_boxes_left_to_sample) * 1.0 / BATCH_SIZE))
         new_epoch_boxes_left_to_sample = []
         new_epoch_boxes_points_idxs_left_to_sample = []
@@ -601,6 +604,5 @@ def eval_one_epoch(sess, ops, test_writer, class_writers):
 
 
 if __name__ == "__main__":
-    log_string('pid: %s'%(str(os.getpid())))
     train()
     LOG_FOUT.close()

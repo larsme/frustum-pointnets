@@ -13,48 +13,23 @@ import argparse
 import importlib
 import numpy as np
 import tensorflow as tf
-import cPickle as pickle
+import pickle as pickle
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
-sys.path.append(BASE_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'models'))
-from model_util import NUM_HEADING_BIN, NUM_SIZE_CLUSTER
-import provider
-from train_util import get_batch
+if BASE_DIR in sys.path:
+    sys.path.remove(BASE_DIR)
+sys.path.append(ROOT_DIR)
+from models.model_util import NUM_HEADING_BIN, NUM_SIZE_CLUSTER
+import train.provider as provider
+from train.train_util import get_batch
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
-parser.add_argument('--num_point', type=int, default=1024, help='Point Number [default: 1024]')
-parser.add_argument('--model', default='frustum_pointnets_v1', help='Model name [default: frustum_pointnets_v1]')
-parser.add_argument('--model_path', default='log/model.ckpt', help='model checkpoint file path [default: log/model.ckpt]')
-parser.add_argument('--batch_size', type=int, default=32, help='batch size for inference [default: 32]')
-parser.add_argument('--output', default='test_results', help='output file/folder name [default: test_results]')
-parser.add_argument('--data_path', default=None, help='frustum dataset pickle filepath [default: None]')
-parser.add_argument('--from_rgb_detection', action='store_true', help='test from dataset files from rgb detection.')
-parser.add_argument('--idx_path', default=None, help='filename of txt where each line is a data idx, used for rgb detection -- write <id>.txt for all frames. [default: None]')
-parser.add_argument('--dump_result', action='store_true', help='If true, also dump results to .pickle file')
-FLAGS = parser.parse_args()
-
-# Set training configurations
-BATCH_SIZE = FLAGS.batch_size
-MODEL_PATH = FLAGS.model_path
-GPU_INDEX = FLAGS.gpu
-NUM_POINT = FLAGS.num_point
-MODEL = importlib.import_module(FLAGS.model)
 NUM_CLASSES = 2
-NUM_CHANNEL = 4
-
 NUM_REAL_CLASSES = 3
 REAL_CLASSES = ['Car', 'Pedestrian', 'Cyclist']
-
-# Load Frustum Datasets.
-TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
-                                       overwritten_data_path=FLAGS.data_path, imageLevelData=True,
-                                       rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
-                                       with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity)
+FLAGS = BATCH_SIZE = NUM_POINT = GPU_INDEX = NUM_CHANNEL = TEST_DATASET = MODEL_PATH = MODEL = 0
 
 
-def get_session_and_ops(batch_size, num_point):
+def get_session_and_ops():
     ''' Define model graph, load model parameters,
     create session and return session handle and tensors
     '''
@@ -79,9 +54,8 @@ def get_session_and_ops(batch_size, num_point):
             #     heading_class_label_pl, heading_residual_label_pl,
             #     size_class_label_pl, size_residual_label_pl, end_points)
 
-            icare = tf.cast(tf.not_equal(batch_gt_labels, -1), tf.float32)
-            num_labeled_points = tf.reduce_sum(icare)
-            loss = MODEL.get_loss(batch_gt_labels, pc_pred_logits, icare, num_labeled_points)
+            icare = tf.cast(tf.not_equal(batch_gt_labels, -1), tf.int32, 'icare')
+            loss = MODEL.get_loss(batch_gt_labels, pc_pred_logits, icare)
             saver = tf.train.Saver()
 
         # Create a session
@@ -127,7 +101,7 @@ def softmax(x):
 def inference(sess, ops, input_pcs, one_hot_vects, box_certainties, batch_size):
     ''' Run inference for frustum pointnets in batch mode '''
     assert input_pcs.shape[0] % batch_size == 0
-    num_batches = input_pcs.shape[0] / batch_size
+    num_batches = int(input_pcs.shape[0] / batch_size)
     inferred_logits = np.zeros((input_pcs.shape[0], input_pcs.shape[1], NUM_CLASSES))
     # centers = np.zeros((input_pcs.shape[0], 3))
     # heading_logits = np.zeros((input_pcs.shape[0], NUM_HEADING_BIN))
@@ -141,7 +115,7 @@ def inference(sess, ops, input_pcs, one_hot_vects, box_certainties, batch_size):
         feed_dict = {\
             ops['batch_input_pc']: input_pcs[i * batch_size:(i + 1) * batch_size, ...],
             ops['batch_one_hot_vec']: one_hot_vects[i * batch_size:(i + 1) * batch_size, :],
-            ops['batch_box_certainty']: box_certainties[i * batch_size:(i + 1) * batch_size, :],
+            ops['batch_box_certainty']: box_certainties[i * batch_size:(i + 1) * batch_size],
             ops['is_training_pl']: False}
 
         # batch_logits, batch_centers, \
@@ -334,10 +308,7 @@ def test(output_filename, result_dir=None):
     # rot_angle_list = []
     score_list = []
 
-    test_idxs = np.arange(0, len(TEST_DATASET))
-    num_batches = len(TEST_DATASET)/BATCH_SIZE
-
-    sess, ops = get_session_and_ops(batch_size=BATCH_SIZE, num_point=NUM_POINT)
+    sess, ops = get_session_and_ops()
 
     epsilon = 1e-12
 
@@ -352,63 +323,83 @@ def test(output_filename, result_dir=None):
     ipr_sum = np.zeros(NUM_REAL_CLASSES)
     i_sum = np.zeros(NUM_REAL_CLASSES)
 
-    for batch_idx in range(num_batches):
-        print('batch idx: %d' % (batch_idx))
-        start_idx = batch_idx * BATCH_SIZE
-        end_idx = (batch_idx+1) * BATCH_SIZE
+    epoch_boxes_left_to_sample = []
+    epoch_boxes_points_idxs_left_to_sample = []
+    for i in np.arange(0, len(TEST_DATASET)):
+        epoch_boxes_left_to_sample.append(i)
+        epoch_boxes_points_idxs_left_to_sample.append(range(np.size(TEST_DATASET.pc_in_box_list[i], 0)))
 
-        # batch_input_pc, batch_gt_labels, batch_center, \
-        # batch_hclass, batch_hres, batch_sclass, batch_sres, \
-        # batch_rot_angle, batch_one_hot_vec = \
-        #     get_batch(TEST_DATASET, test_idxs, start_idx, end_idx,
-        #         NUM_POINT, NUM_CHANNEL)
-        batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, batch_one_hot_vec = \
-            get_batch(TEST_DATASET, batch_idx, start_idx, end_idx, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES)
+    while len(epoch_boxes_left_to_sample) > 0:
+        num_batches = int(np.ceil(len(epoch_boxes_left_to_sample) * 1.0 / BATCH_SIZE))
+        new_epoch_boxes_left_to_sample = []
+        new_epoch_boxes_points_idxs_left_to_sample = []
+        print(num_batches)
 
-    # pc_pred_labels, batch_center_pred, \
-    #     batch_hclass_pred, batch_hres_pred, \
-    #     batch_sclass_pred, batch_sres_pred, batch_scores = \
-    #         inference(sess, ops, batch_input_pc,
-    #                   batch_one_hot_vec, batch_size=batch_size)
-        pc_pred_labels, batch_scores = \
-            inference(sess, ops, batch_input_pc, batch_one_hot_vec, batch_box_certainty, batch_size=BATCH_SIZE)
+        for batch_idx in range(num_batches):
+            print('batch idx: %d' % (batch_idx))
+            start_idx = batch_idx * BATCH_SIZE
+            end_idx = min(start_idx+BATCH_SIZE, len(epoch_boxes_left_to_sample))
 
-        for i in range(BATCH_SIZE):
-            image_id = TEST_DATASET.box_image_id_list[start_idx + i]
-            assigned_inds = TEST_DATASET.pc_in_box_inds_list[start_idx + i]
-            (image_pc_pred_label_list[image_id][assigned_inds])[pc_pred_labels] = TEST_DATASET.box_class_list[start_idx + i]
+            batch_box_idxs = epoch_boxes_left_to_sample[start_idx:end_idx]
+            batch_box_points_left_to_sample = epoch_boxes_points_idxs_left_to_sample[start_idx:end_idx]
 
-        icare = batch_gt_labels != -1
+            # batch_input_pc, batch_gt_labels, batch_center, \
+            # batch_hclass, batch_hres, batch_sclass, batch_sres, \
+            # batch_rot_angle, batch_one_hot_vec = \
+            #     get_batch(TEST_DATASET, test_idxs, start_idx, end_idx,
+            #         NUM_POINT, NUM_CHANNEL)
+            batch_input_pc, batch_gt_labels, batch_rot_angle, batch_box_certainty, \
+                new_batch_box_points_left_to_sample, batch_one_hot_vec = \
+                get_batch(TEST_DATASET, BATCH_SIZE, batch_box_idxs, NUM_POINT, NUM_CHANNEL, NUM_REAL_CLASSES,
+                          batch_box_points_left_to_sample)
+            for i in range(len(batch_box_idxs)):
+                if len(new_batch_box_points_left_to_sample[i]) > 0:
+                    new_epoch_boxes_left_to_sample.append(batch_box_idxs[i])
+                    new_epoch_boxes_points_idxs_left_to_sample.append(new_batch_box_points_left_to_sample[i])
 
-        tps = np.sum(batch_gt_labels * pc_pred_labels * icare, 1)
-        fns = np.sum(batch_gt_labels * (1 - pc_pred_labels * icare), 1)
-        fps = np.sum((1- batch_gt_labels) * pc_pred_labels * icare, 1)
+        # pc_pred_labels, batch_center_pred, \
+        #     batch_hclass_pred, batch_hres_pred, \
+        #     batch_sclass_pred, batch_sres_pred, batch_scores = \
+        #         inference(sess, ops, batch_input_pc,
+        #                   batch_one_hot_vec, batch_size=batch_size)
+            pc_pred_labels, batch_scores = \
+                inference(sess, ops, batch_input_pc, batch_one_hot_vec, batch_box_certainty, batch_size=BATCH_SIZE)
 
-        iiou = tps.astype(np.float) / (tps + fns + fps + epsilon)
-        ipr = tps.astype(np.float) / (tps + fps + epsilon)
-        ire = tps.astype(np.float) / (tps + fns + epsilon)
+            icare = batch_gt_labels != -1
 
-        for i in range(BATCH_SIZE):
-            iiou_sum[batch_one_hot_vec[i, :]] += iiou[i]
-            ire_sum[batch_one_hot_vec[i, :]] += ire[i]
-            ipr_sum[batch_one_hot_vec[i, :]] += ipr[i]
-            i_sum[batch_one_hot_vec[i, :]] += 1
+            tps = np.sum(batch_gt_labels * pc_pred_labels * icare, 1)
+            fns = np.sum(batch_gt_labels * (1 - pc_pred_labels * icare), 1)
+            fps = np.sum((1- batch_gt_labels) * pc_pred_labels * icare, 1)
 
-            tp_sum[batch_one_hot_vec[i, :]] += tps[i]
-            box_fn_sum[batch_one_hot_vec[i, :]] += fns[i]
-            fp_sum[batch_one_hot_vec[i, :]] += fps[i]
+            iiou = tps.astype(np.float) / (tps + fns + fps + epsilon)
+            ipr = tps.astype(np.float) / (tps + fps + epsilon)
+            ire = tps.astype(np.float) / (tps + fns + epsilon)
 
-        for i in range(pc_pred_labels.shape[0]):
-            # input_pc_list.append(batch_input_pc[i, ...])
-            # gt_labels_list.append(batch_gt_labels[i, ...])
-            # pred_labels_list.append(pc_pred_labels[i, ...])
-            # center_list.append(batch_center_pred[i,:])
-            # heading_cls_list.append(batch_hclass_pred[i])
-            # heading_res_list.append(batch_hres_pred[i])
-            # size_cls_list.append(batch_sclass_pred[i])
-            # size_res_list.append(batch_sres_pred[i,:])
-            # rot_angle_list.append(batch_rot_angle[i])
-            score_list.append(batch_scores[i])
+            for i in range(BATCH_SIZE):
+                point_percentage = np.sum(icare[i, :]) * 1.0 \
+                                   / len(TEST_DATASET.pc_in_box_label_list[batch_box_idxs[i]])
+                iiou_sum[batch_one_hot_vec[i, :]] += point_percentage * iiou[i]
+                ire_sum[batch_one_hot_vec[i, :]] += point_percentage * ire[i]
+                ipr_sum[batch_one_hot_vec[i, :]] += point_percentage * ipr[i]
+                i_sum[batch_one_hot_vec[i, :]] += point_percentage
+
+                tp_sum[batch_one_hot_vec[i, :]] += tps[i]
+                box_fn_sum[batch_one_hot_vec[i, :]] += fns[i]
+                fp_sum[batch_one_hot_vec[i, :]] += fps[i]
+
+            for i in range(pc_pred_labels.shape[0]):
+                # input_pc_list.append(batch_input_pc[i, ...])
+                # gt_labels_list.append(batch_gt_labels[i, ...])
+                # pred_labels_list.append(pc_pred_labels[i, ...])
+                # center_list.append(batch_center_pred[i,:])
+                # heading_cls_list.append(batch_hclass_pred[i])
+                # heading_res_list.append(batch_hres_pred[i])
+                # size_cls_list.append(batch_sclass_pred[i])
+                # size_res_list.append(batch_sres_pred[i,:])
+                # rot_angle_list.append(batch_rot_angle[i])
+                score_list.append(batch_scores[i])
+        epoch_boxes_points_idxs_left_to_sample = new_epoch_boxes_points_idxs_left_to_sample
+        epoch_boxes_left_to_sample = new_epoch_boxes_left_to_sample
 
     box_ious = tp_sum.astype(np.float)/(tp_sum + box_fn_sum + fp_sum + epsilon)
     box_prs = tp_sum.astype(np.float)/(tp_sum + fp_sum + epsilon)
@@ -474,4 +465,55 @@ if __name__=='__main__':
     #     test_from_rgb_detection(FLAGS.output+'.pickle', FLAGS.output)
     # else:
     #     test(FLAGS.output+'.pickle', FLAGS.output)
+
+    global FLAGS, BATCH_SIZE, NUM_POINT, GPU_INDEX, NUM_CHANNEL, TEST_DATASET, MODEL_PATH, MODEL
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
+    parser.add_argument('--num_point', type=int, default=1024, help='Point Number [default: 1024]')
+    parser.add_argument('--model', default='frustum_pointnets_v1', help='Model name [default: frustum_pointnets_v1]')
+    parser.add_argument('--model_path', default='log/model.ckpt',
+                        help='model checkpoint file path [default: log/model.ckpt]')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size for inference [default: 32]')
+    parser.add_argument('--output', default='test_results', help='output file/folder name [default: test_results]')
+    parser.add_argument('--data_path', default=None, help='frustum dataset pickle filepath [default: None]')
+    parser.add_argument('--from_rgb_detection', action='store_true', help='test from dataset files from rgb detection.')
+    parser.add_argument('--idx_path', default=None,
+                        help='filename of txt where each line is a data idx, used for rgb detection -- write <id>.txt for all frames. [default: None]')
+    parser.add_argument('--dump_result', action='store_true', help='If true, also dump results to .pickle file')
+    parser.add_argument('--with_intensity', action='store_true', help='Use Intensity for training')
+    parser.add_argument('--with_colors', action='store_true', help='Use Colors for training')
+    parser.add_argument('--with_depth_confidences', action='store_true', help='Use depth completion confidences')
+    parser.add_argument('--from_guided_depth_completion', action='store_true',
+                        help='Use point cloud from depth completion')
+    parser.add_argument('--from_unguided_depth_completion', action='store_true',
+                        help='Use point cloud from unguided depth completion')
+    parser.add_argument('--from_depth_prediction', action='store_true', help='Use point cloud from depth prediction')
+    parser.add_argument('--restore_model_path', default=None,
+                        help='Restore model path e.g. log/model.ckpt [default: None]')
+    parser.add_argument('--dont_input_box_probabilities', action='store_true',
+                        help='Use box probabilities as net inputs')
+    parser.add_argument('--avoid_point_duplicates', action='store_true',
+                        help='Try to avoid point duplicates when sampling')
+    FLAGS = parser.parse_args()
+
+    # Set training configurations
+    BATCH_SIZE = FLAGS.batch_size
+    MODEL_PATH = FLAGS.model_path
+    GPU_INDEX = FLAGS.gpu
+    NUM_POINT = FLAGS.num_point
+    MODEL = importlib.import_module(FLAGS.model)
+    NUM_CHANNEL = 4
+
+    # Load Frustum Datasets.
+    print('--- Loading Testing Dataset ---')
+    TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
+                                           random_flip=False, random_shift=False,
+                                           rotate_to_center=True, box_class_one_hot=True, from_rgb_detection=True,
+                                           with_color=FLAGS.with_colors, with_intensity=FLAGS.with_intensity,
+                                           with_depth_confidences=FLAGS.with_depth_confidences,
+                                           from_guided_depth_completion=FLAGS.from_guided_depth_completion,
+                                           from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
+                                           from_depth_prediction=FLAGS.from_depth_prediction,
+                                           segment_all_points=True, avoid_duplicates=FLAGS.avoid_point_duplicates)
     test(FLAGS.output + '.pickle', FLAGS.output)
