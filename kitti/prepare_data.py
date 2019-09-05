@@ -590,7 +590,8 @@ def extract_frustum_data(split_file_datapath,
             overlapping_3d_boxes = np.nonzero(pc_labels[instance_pc_indexes])[0]
             pc_labels[instance_pc_indexes] = label_object.type
             (pc_labels[instance_pc_indexes])[overlapping_3d_boxes] = 'DontCare'
-            if not from_rgb_detection and label_object.type in type_whitelist:
+            xmin, ymin, xmax, ymax = label_object.box2d
+            if not from_rgb_detection and label_object.type in type_whitelist and ymax - ymin >= img_height_threshold:
                 det_box_geometry_list.append(label_object.box2d)
                 det_box_certainty_list.append(1)
                 det_box_class_list.append(label_object.type)
@@ -600,8 +601,20 @@ def extract_frustum_data(split_file_datapath,
         image_box_detected_label_list[image_idx] = np.zeros((pc_labels.shape[0], augment_x), np.bool_)
 
     if from_rgb_detection:
-        det_box_image_index_list, det_box_class_list, det_box_geometry_list, det_box_certainty_list = \
+        all_det_box_image_index_list, all_det_box_class_list, all_det_box_geometry_list, \
+        all_det_box_certainty_list = \
             read_box_file(rgb_det_filename)
+        det_box_image_index_list = []
+        det_box_class_list = []
+        det_box_geometry_list = []
+        det_box_certainty_list = []
+        for box_idx in range(len(all_det_box_class_list)):
+            xmin, ymin, xmax, ymax = all_det_box_geometry_list[box_idx]
+            if all_det_box_class_list[box_idx] in type_whitelist and ymax - ymin >= img_height_threshold:
+                det_box_image_index_list.append(all_det_box_image_index_list[box_idx])
+                det_box_class_list.append(all_det_box_class_list[box_idx])
+                det_box_geometry_list.append(all_det_box_geometry_list[box_idx])
+                det_box_certainty_list.append(all_det_box_certainty_list[box_idx])
 
     cache_id = -1
     cache = None

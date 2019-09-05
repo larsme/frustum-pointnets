@@ -92,7 +92,7 @@ if from_depth_completion:
 
         depth_net = load_net(training_ws_path='workspace/exp_unguided_depth',
                              network_file='network_exp_unguided_depth',
-                             params_sub_dir='Default', mode='bla', checkpoint_num=3, sets=None)
+                             params_sub_dir='Experiments/Old', mode='bla', checkpoint_num=3, sets=[])
     desired_image_height = 352
     desired_image_width = 1216
 elif FLAGS.from_depth_prediction:
@@ -257,12 +257,12 @@ def get_point_cloud(det_box_geometry, det_box_class,
 
         pc_in_box_custom_labels = pc_in_box_labels
     else:
-        int_x_min = int(max(np.floor(xmin), 0))
-        int_x_max = int(min(np.ceil(xmax), img_width - 1))
+        int_x_min = max(int(np.floor(xmin)), 0)
+        int_x_max = min(int(np.ceil(xmax)), img_width - 1)
         box_x_width = int_x_max - int_x_min + 1
 
-        int_y_min = int(max(np.floor(ymin), 0))
-        int_y_max = int(min(np.ceil(ymax), img_height - 1))
+        int_y_min = max(int(np.floor(ymin)), 0)
+        int_y_max = min(int(np.ceil(ymax)), img_height - 1)
         box_y_width = int_y_max - int_y_min + 1
 
         box_sub_pixels_row, box_sub_pixels_col = np.indices((box_y_width, box_x_width))
@@ -456,7 +456,7 @@ def class_to_color(type):
         return c2
 
 
-def show_image_with_2d_boxes(img, det_box_geometry_list, det_box_class_list):
+def show_image_with_2d_boxes(img, det_box_geometry_list, det_box_class_list, title):
     ''' Show image with 2D bounding boxes '''
     img2 = np.copy(img) # for 2d bbox
     for box_i in range(len(det_box_geometry_list)):
@@ -464,11 +464,11 @@ def show_image_with_2d_boxes(img, det_box_geometry_list, det_box_class_list):
         cv2.rectangle(img2, pt1=(int(xmin), int(ymin)), pt2=(int(xmax), int(ymax)),
                       color=class_to_color(det_box_class_list[box_i]), thickness=2)
     fig = Image.fromarray(img2)
-    fig.show('img_with_2d_boxes')
-    fig.save('img_with_2d_boxes.png')
+    fig.show(title)
+    fig.save(title+'.png')
 
 
-def show_image_with_3d_boxes(img, objects, calib):
+def show_image_with_3d_boxes(img, objects, calib, title):
     ''' Show image with 2D bounding boxes '''
     img2 = np.copy(img) # for 3d bbox
     for obj in objects:
@@ -476,8 +476,8 @@ def show_image_with_3d_boxes(img, objects, calib):
             box3d_pts_2d, _ = utils.compute_box_3d(obj, calib.P)
             img2 = utils.draw_projected_box3d(img2, box3d_pts_2d, color=class_to_color(obj.type), thickness=2)
     fig = Image.fromarray(img2)
-    fig.show('img_with_3d_boxes')
-    fig.save('img_with_3d_boxes.png')
+    fig.show(title)
+    fig.save(title+'.png')
 
 
 def show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, box_class_list, title):
@@ -490,7 +490,6 @@ def show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, box_cla
 
         labels = labeled[pts_2d_in_box[:, 1], pts_2d_in_box[:, 0]]
 
-        true_was_true = np.logical_and(pc_in_box_labels == 1, labels == 1)
         true_was_not_true = np.logical_and(pc_in_box_labels == 1, labels != 1)
 
         false_was_not_true = np.logical_and(pc_in_box_labels == 0, labels != 1)
@@ -499,9 +498,6 @@ def show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, box_cla
 
         px_true_was_not_true = pts_2d_in_box[true_was_not_true, 0]
         py_true_was_not_true = pts_2d_in_box[true_was_not_true, 1]
-
-        px_true_was_true = pts_2d_in_box[true_was_true, 0]
-        py_true_was_true = pts_2d_in_box[true_was_true, 1]
 
         px_false_was_not_true = pts_2d_in_box[false_was_not_true, 0]
         py_false_was_not_true = pts_2d_in_box[false_was_not_true, 1]
@@ -512,7 +508,6 @@ def show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, box_cla
         label_img[py_true_was_not_true, px_true_was_not_true] = box_color
         label_img[py_false_was_not_true, px_false_was_not_true] = (255, 255, 255)
         label_img[py_dont_care, px_dont_care] = (60, 60, 60)
-        label_img[py_true_was_true, px_true_was_true] = (60, 60, 60)
 
         labeled[py_true_was_not_true, px_true_was_not_true] = 1
         labeled[py_false_was_not_true, px_false_was_not_true] = 0
@@ -580,14 +575,26 @@ while True:
     fig = Image.fromarray(img)
     fig.show('img')
     fig.save('img.png')
-    show_image_with_2d_boxes(img, det_box_geometry_list, det_box_class_list)
-    show_image_with_3d_boxes(img, label_objects, calib)
+    if FLAGS.from_rgb_detection:
+        s2 = 'detected_boxes'
+    else:
+        s2 = 'gt_boxes'
+    show_image_with_2d_boxes(img, det_box_geometry_list, det_box_class_list, 'img_with_2D_%s' % s2)
+    show_image_with_3d_boxes(img, label_objects, calib, 'img_with_3D_%s' % s2)
     show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, det_box_class_list,
-                         'lidar_labels')
+                         'gt_lidar_labels_with_%s' % s2)
+    if FLAGS.from_guided_depth_completion:
+        s = 'guided_depth_completion'
+    elif FLAGS.from_unguided_depth_completion:
+        s = 'unguided_depth_completion'
+    elif FLAGS.from_depth_prediction:
+        s = 'monokular_depth_prediction'
+    else:
+        s = 'lidar_only'
     if use_depth_net:
         show_segmented_image(img, pts_2d_in_box_list, pc_in_box_custom_labels_list, det_box_class_list,
-                             'depth_estimation_labels')
+                             'ideal_labels_%s_with_%s' % (s, s2))
         show_segmented_image(img, pts_2d_in_box_list, completed_box_pred_labels_list, det_box_class_list,
-                             'predicted_labels')
+                             'predicted_labels_%s_with_%s' % (s, s2))
     show_segmented_image(img, pts_2d_in_box_list, box_pred_labels_list, det_box_class_list,
-                         'predicted_lidar_labels')
+                         'predicted_lidar_labels_%s_with_%s' % (s, s2))
