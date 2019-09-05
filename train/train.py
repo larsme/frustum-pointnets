@@ -90,6 +90,7 @@ def train():
                         help='Use box probabilities as net inputs')
     parser.add_argument('--avoid_point_duplicates', action='store_true',
                         help='Try to avoid point duplicates when sampling')
+    parser.add_argument('--depth_completion_augmentation', action='store_true')
     FLAGS = parser.parse_args()
 
     # Set training configurations
@@ -121,7 +122,8 @@ def train():
                                             from_guided_depth_completion=FLAGS.from_guided_depth_completion,
                                             from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
                                             from_depth_prediction=FLAGS.from_depth_prediction,
-                                            segment_all_points=False, avoid_duplicates=FLAGS.avoid_point_duplicates)
+                                            segment_all_points=False, avoid_duplicates=FLAGS.avoid_point_duplicates,
+                                            depth_completion_augmentation=FLAGS.depth_completion_augmentation)
     print('--- Loading Testing Dataset ---')
     TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
                                            random_flip=False, random_shift=False,
@@ -131,7 +133,8 @@ def train():
                                            from_guided_depth_completion=FLAGS.from_guided_depth_completion,
                                            from_unguided_depth_completion=FLAGS.from_unguided_depth_completion,
                                            from_depth_prediction=FLAGS.from_depth_prediction,
-                                           segment_all_points=True, avoid_duplicates=FLAGS.avoid_point_duplicates)
+                                           segment_all_points=True, avoid_duplicates=FLAGS.avoid_point_duplicates,
+                                           depth_completion_augmentation=False)
 
     print('--- Loading Model ---')
     MODEL = importlib.import_module(FLAGS.model)  # import network module

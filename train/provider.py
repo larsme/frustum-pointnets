@@ -10,6 +10,8 @@ import pickle as pickle # python 3.5
 import sys
 import os
 import numpy as np
+import cv2
+from PIL import Image
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 if BASE_DIR in sys.path:
@@ -19,6 +21,9 @@ from train.box_util import box3d_iou
 from models.model_util import g_type2class, g_class2type, g_type2onehotclass
 from models.model_util import g_type_mean_size
 from models.model_util import NUM_HEADING_BIN, NUM_SIZE_CLUSTER
+from kitti.kitti_object import kitti_object
+from kitti.prepare_data import read_box_file, extract_pc_in_box3d, get_lidar_in_image_fov
+from kitti.kitti_util import compute_box_3d
 
 try:
     raw_input          # Python 2
@@ -108,7 +113,7 @@ class FrustumDataset(object):
                  with_intensity=True, with_color=True, vizualize_labled_images=False,
                  with_depth_confidences=False, from_guided_depth_completion=False, from_unguided_depth_completion=False,
                  from_depth_prediction=False,
-                 segment_all_points=False, avoid_duplicates=False):
+                 segment_all_points=False, avoid_duplicates=False, depth_completion_augmentation=False):
         '''
         Input:
             npoints: int scalar, number of points for frustum point cloud.
@@ -125,11 +130,14 @@ class FrustumDataset(object):
             box_class_one_hot: bool, if True, return one hot vector
         '''
         from_depth_completion = from_guided_depth_completion or from_unguided_depth_completion
-        use_net = from_depth_prediction or from_depth_completion
+        self.use_depth_net = from_depth_prediction or from_depth_completion
 
         assert int(from_guided_depth_completion) + int(from_unguided_depth_completion) + int(from_depth_prediction) <= 1
         assert from_depth_completion or not with_depth_confidences
-        assert not (use_net and with_intensity)
+        assert not (self.use_depth_net and with_intensity)
+
+        assert split == 'train' or not depth_completion_augmentation
+        assert not with_intensity or not depth_completion_augmentation
 
         self.classes = classes
         self.npoints = npoints
@@ -139,6 +147,12 @@ class FrustumDataset(object):
         self.box_class_one_hot = box_class_one_hot
         self.segment_all_points = segment_all_points
         self.avoid_duplicates = avoid_duplicates
+        self.depth_completion_augmentation = depth_completion_augmentation
+        self.with_depth_confidences = with_depth_confidences
+        self.with_color = with_color
+        self.from_guided_depth_completion = from_guided_depth_completion
+        self.from_unguided_depth_completion = from_unguided_depth_completion
+        self.from_depth_prediction = from_depth_prediction
 
         if overwritten_data_path is None:
             designation = 'frustum_'
@@ -156,7 +170,83 @@ class FrustumDataset(object):
             overwritten_data_path = os.path.join(ROOT_DIR, 'kitti/%s.pickle' % (designation))
 
         self.from_rgb_detection = from_rgb_detection
-        if from_rgb_detection:
+
+        if self.use_depth_net:
+            if from_depth_completion:
+                if from_guided_depth_completion:
+                    bla = 0
+                    # depth_net = load_net('exp_guided_nconv_cnn_l1', mode='bla', checkpoint_num=40, set_='bla')
+                else: # from_unguided_depth_completion:
+                    sys.path.append(os.path.join(ROOT_DIR, '../nconv'))
+                    from run_nconv_cnn import load_net
+                    self.depth_net = load_net('exp_unguided_depth', mode='bla', checkpoint_num=3, set_='bla')
+                self.desired_image_height = 352
+                self.desired_image_width = 1216
+            elif from_depth_prediction:
+                sys.path.append(os.path.join(ROOT_DIR, '../monodepth2'))
+                from monodepth_external import load_net
+                self.depth_net = load_net("mono+stereo_1024x320", use_cuda=True)
+
+        if depth_completion_augmentation:
+            self.dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), 'training')
+            img_height_threshold = 25
+
+            self.box_class_list = []
+            self.box_geometry_list = []
+            self.box_class_certainty_list = []
+            self.box_image_idx_list = []
+            self.frustum_angle_list = []
+            if from_rgb_detection:
+                rgb_det_filename = os.path.join(ROOT_DIR, 'kitti/rgb_detections/rgb_detection_%s.txt' % split)
+                all_det_box_image_index_list, all_det_box_class_list, all_det_box_geometry_list, \
+                    all_det_box_certainty_list = \
+                    read_box_file(rgb_det_filename)
+                for box_idx in range(len(all_det_box_class_list)):
+                    if box_idx % 1000 == 0:
+                        print('preparing box %d out of %d' %(box_idx, len(all_det_box_class_list)))
+                    xmin, ymin, xmax, ymax = all_det_box_geometry_list[box_idx]
+                    if all_det_box_class_list[box_idx] in classes and ymax - ymin >= img_height_threshold:
+                        self.box_image_idx_list.append(all_det_box_image_index_list[box_idx])
+                        self.box_class_list.append(all_det_box_class_list[box_idx])
+                        self.box_geometry_list.append(all_det_box_geometry_list[box_idx])
+                        self.box_class_certainty_list.append(all_det_box_certainty_list[box_idx])
+
+                        # Get frustum angle (according to center pixel in 2D BOX)
+                        calib = self.dataset.get_calibration(all_det_box_image_index_list[box_idx])  # 3 by 4 matrix
+                        box2d_center = np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0])
+                        uvdepth = np.zeros((1, 3))
+                        uvdepth[0, 0:2] = box2d_center
+                        uvdepth[0, 2] = 20  # some random depth
+                        box2d_center_rect = calib.project_image_to_rect(uvdepth)
+                        frustum_angle = -1 * np.arctan2(box2d_center_rect[0, 2],
+                                                        box2d_center_rect[0, 0])
+                        self.frustum_angle_list.append(frustum_angle)
+            else:
+                split_datapath = os.path.join(ROOT_DIR, 'kitti/image_sets/%s.txt' % split)
+                image_idx_list = [int(line.rstrip()) for line in open(split_datapath)]
+                for image_idx in image_idx_list:
+                    if image_idx % 100 == 0:
+                        print('preparing image %d out of %d' %(image_idx, len(image_idx_list)))
+                    calib = self.dataset.get_calibration(image_idx)  # 3 by 4 matrix
+                    label_objects = self.dataset.get_label_objects(image_idx)
+                    for label_object in label_objects:
+                        xmin, ymin, xmax, ymax = label_object.box2d
+                        if label_object.type in classes and ymax - ymin >= img_height_threshold:
+                            self.box_image_idx_list.append(image_idx)
+                            self.box_geometry_list.append(label_object.box2d, label_object)
+                            self.box_certainty_list.append(1)
+                            self.box_class_list.append(label_object.type)
+
+                            # Get frustum angle (according to center pixel in 2D BOX)
+                            box2d_center = np.array([(xmin + xmax) / 2.0, (ymin + ymax) / 2.0])
+                            uvdepth = np.zeros((1, 3))
+                            uvdepth[0, 0:2] = box2d_center
+                            uvdepth[0, 2] = 20  # some random depth
+                            box2d_center_rect = calib.project_image_to_rect(uvdepth)
+                            frustum_angle = -1 * np.arctan2(box2d_center_rect[0, 2],
+                                                            box2d_center_rect[0, 0])
+                            self.frustum_angle_list.append(frustum_angle)
+        else:
             with open(overwritten_data_path, 'rb') as fp:
                 # self.id_list = pickle.load(fp)
                 # self.box2d_list = pickle.load(fp)
@@ -182,7 +272,7 @@ class FrustumDataset(object):
                     channels = np.zeros(7, np.bool_)
                 channels[:3] = 1
                 i_channel = 3
-                if not use_net:
+                if not self.use_depth_net:
                     if with_intensity:
                         channels[i_channel] = 1
                     i_channel += 1
@@ -207,92 +297,120 @@ class FrustumDataset(object):
 
                 if vizualize_labled_images:
                     print('box image ids')
-                    self.box_image_id_list = pickle.load(fp)
+                    self.box_image_idx_list = pickle.load(fp)
                     print('point cloud indices')
                     self.pc_in_box_inds_list = pickle.load(fp)
                     print('image point cloud labels')
                     self.image_pc_label_list = pickle.load(fp)
+
                     # load velodyne
                     # ...
 
-
-        # else:
-            # with open(overwritten_data_path, 'rb') as fp:
-            #     self.id_list = pickle.load(fp)
-            #     self.box2d_list = pickle.load(fp)
-            #     self.box3d_list = pickle.load(fp)
-            #     self.input_list = pickle.load(fp)
-            #     self.label_list = pickle.load(fp)
-            #     self.type_list = pickle.load(fp)
-            #     self.heading_list = pickle.load(fp)
-            #     self.size_list = pickle.load(fp)
-            #     # frustum_angle is clockwise angle from positive x-axis
-            #     self.frustum_angle_list = pickle.load(fp)
+                # else:
+                # with open(overwritten_data_path, 'rb') as fp:
+                #     self.id_list = pickle.load(fp)
+                #     self.box2d_list = pickle.load(fp)
+                #     self.box3d_list = pickle.load(fp)
+                #     self.input_list = pickle.load(fp)
+                #     self.label_list = pickle.load(fp)
+                #     self.type_list = pickle.load(fp)
+                #     self.heading_list = pickle.load(fp)
+                #     self.size_list = pickle.load(fp)
+                #     # frustum_angle is clockwise angle from positive x-axis
+                #     self.frustum_angle_list = pickle.load(fp)
 
     def __len__(self):
-        return len(self.frustum_angle_list)
+        return len(self.box_class_list)
 
     def __getitem__(self, opts):
         ''' Get box_index-th element from the picked file dataset. '''
         # ------------------------------ INPUTS ----------------------------
         box_index, left_to_sample = opts
-        rot_angle = self.get_center_view_rot_angle(box_index)
 
         # Compute one hot vector
         if self.box_class_one_hot:
             box_class = self.box_class_list[box_index]
-            assert(box_class in self.classes)
+            assert (box_class in self.classes)
             box_class_one_hot_vec = np.zeros((len(self.classes)), np.bool_)
             box_class_one_hot_vec[g_type2onehotclass[box_class]] = 1
 
-        # Get point cloud
-        if self.rotate_to_center:
-            input_pc = self.get_center_view_point_set(box_index)
+        if self.depth_completion_augmentation:
+            assert left_to_sample == []
+
+            image_index = self.box_image_idx_list[box_index]
+            calib = self.dataset.get_calibration(image_index)  # 3 by 4 matrix
+            img = self.dataset.get_image(image_index)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img_height, img_width, img_channel = img.shape
+            res_dir = os.path.join(ROOT_DIR, '../../data/completed_depth')
+
+            dense_depths = []
+            confidences = []
+            if self.depth_completion_augmentation:
+                (dense_depths, confidences) = np.load(os.path.join(res_dir, str(image_index) + '.npy'))
+
+            # 2D BOX: Get pts rect backprojected
+            xmin, ymin, xmax, ymax = self.box_geometry_list[box_index]
+
+            int_x_min = int(max(np.floor(xmin), 0))
+            int_x_max = int(min(np.ceil(xmax), img_width - 1))
+            box_x_width = int_x_max - int_x_min + 1
+
+            int_y_min = int(max(np.floor(ymin), 0))
+            int_y_max = int(min(np.ceil(ymax), img_height - 1))
+            box_y_width = int_y_max - int_y_min + 1
+
+            box_sub_pixels_row, box_sub_pixels_col = np.indices((box_y_width, box_x_width))
+            box_sub_pixels_row = np.reshape(box_sub_pixels_row, -1)
+            box_sub_pixels_col = np.reshape(box_sub_pixels_col, -1)
+
+            choice, idontcare, left_to_sample = self.get_choice(left_to_sample, box_sub_pixels_row.shape[0])
+
+            box_sub_pixels_row = box_sub_pixels_row[choice]
+            box_sub_pixels_col = box_sub_pixels_col[choice]
+            pixels_in_box_row = box_sub_pixels_row + int_y_min
+            pixels_in_box_col = box_sub_pixels_col + int_x_min
+
+            depths_in_box = dense_depths[pixels_in_box_row, pixels_in_box_col]
+            new_pc_img_in_box = np.concatenate((np.ndarray.astype(np.expand_dims(pixels_in_box_col, 1), np.float),
+                                                np.ndarray.astype(np.expand_dims(pixels_in_box_row, 1), np.float),
+                                                np.expand_dims(depths_in_box, 1)), axis=1)
+            new_pc_rect_in_box = calib.project_image_to_rect(new_pc_img_in_box)
+
+            pc_in_box_gt_labels = np.zeros((np.size(new_pc_rect_in_box, 0)), np.int) - 1
+
+            for label_object in self.dataset.get_label_objects(image_index):
+                _, box3d_pts_3d = compute_box_3d(label_object, calib.P)
+                _, instance_pc_indexes = extract_pc_in_box3d(new_pc_rect_in_box, box3d_pts_3d)
+                overlapping_3d_boxes = np.nonzero(pc_in_box_gt_labels[instance_pc_indexes])[0]
+                pc_in_box_gt_labels[instance_pc_indexes] = 1
+                (pc_in_box_gt_labels[instance_pc_indexes])[overlapping_3d_boxes] = -1
+
+            input_pc = new_pc_rect_in_box
+            if self.with_depth_confidences:
+                confidences_in_box = np.expand_dims(confidences[pixels_in_box_row, pixels_in_box_col], 1)
+                input_pc = np.concatenate((input_pc, confidences_in_box), axis=1)
+            if self.with_color:
+                pc_in_box_colors = img[pixels_in_box_row, pixels_in_box_col, :]
+                input_pc = np.concatenate((input_pc, pc_in_box_colors), axis=1)
         else:
             input_pc = self.pc_in_box_list[box_index]
+            choice, idontcare, left_to_sample = self.get_choice(left_to_sample, input_pc.shape[0])
+            input_pc = input_pc[choice, :]
 
-        # Resample
-        if self.segment_all_points:
-            if len(left_to_sample) <= self.npoints:
-                choice = np.zeros(self.npoints, np.int_)
-                choice[0:len(left_to_sample)] = left_to_sample
-                if self.avoid_duplicates and input_pc.shape[0] >= self.npoints:
-                    sampled = np.delete(range(input_pc.shape[0]), left_to_sample)
-                    choice[len(left_to_sample):self.npoints] = np.random.choice(sampled,
-                                                                                self.npoints - len(left_to_sample),
-                                                                                replace=False)
-                else:
-                    choice[len(left_to_sample):self.npoints] = np.random.choice(input_pc.shape[0],
-                                                                                self.npoints - len(left_to_sample),
-                                                                                replace=True)
-                idontcare = np.zeros(self.npoints, np.bool_)
-                idontcare[len(left_to_sample):self.npoints] = True
-                permut = np.random.permutation(range(self.npoints))
-                choice = choice[permut]
-                idontcare = idontcare[permut]
-                left_to_sample = []
-            else:
-                choice = np.random.permutation(left_to_sample)
-                left_to_sample = choice[self.npoints:]
-                choice = choice[:self.npoints]
-                idontcare = np.zeros(self.npoints, np.bool_)
-        else:
-            if self.avoid_duplicates and input_pc.shape[0] >= self.npoints:
-                choice = np.random.choice(input_pc.shape[0], self.npoints, replace=False)
-            else:
-                choice = np.random.choice(input_pc.shape[0], self.npoints, replace=True)
-            idontcare = np.zeros(self.npoints, np.bool_)
-        input_pc = input_pc[choice, :]
+            # if self.from_rgb_detection:
+            #     if self.box_class_one_hot:
+            #         return input_pc, rot_angle, self.box_class_certainty_list[box_index], box_class_one_hot_vec
+            #     else:
+            #         return input_pc, rot_angle, self.box_class_certainty_list[box_index]
 
-        # if self.from_rgb_detection:
-        #     if self.box_class_one_hot:
-        #         return input_pc, rot_angle, self.box_class_certainty_list[box_index], box_class_one_hot_vec
-        #     else:
-        #         return input_pc, rot_angle, self.box_class_certainty_list[box_index]
+            # ------------------------------ LABELS ----------------------------
+            pc_in_box_gt_labels = np.squeeze(self.pc_in_box_label_list[box_index][choice])
+            pc_in_box_gt_labels[idontcare] = -1
 
-        # ------------------------------ LABELS ----------------------------
-        pc_in_box_gt_labels = np.squeeze(self.pc_in_box_label_list[box_index][choice])
-        pc_in_box_gt_labels[idontcare] = -1
+        rot_angle = self.get_center_view_rot_angle(box_index)
+        if self.rotate_to_center:
+            input_pc = rotate_pc_along_y(input_pc, rot_angle)
 
         # # Get center point of 3D box
         # if self.rotate_to_center:
@@ -342,6 +460,40 @@ class FrustumDataset(object):
             else:
                 return [input_pc, pc_in_box_gt_labels, rot_angle, self.box_class_certainty_list[box_index],
                         left_to_sample]
+
+    def get_choice(self, left_to_sample, nLidarPoints):
+        # Resample
+        if self.segment_all_points:
+            if len(left_to_sample) <= self.npoints:
+                choice = np.zeros(self.npoints, np.int_)
+                choice[0:len(left_to_sample)] = left_to_sample
+                if self.avoid_duplicates and nLidarPoints >= self.npoints:
+                    sampled = np.delete(range(nLidarPoints), left_to_sample)
+                    choice[len(left_to_sample):self.npoints] = np.random.choice(sampled,
+                                                                                self.npoints - len(left_to_sample),
+                                                                                replace=False)
+                else:
+                    choice[len(left_to_sample):self.npoints] = np.random.choice(nLidarPoints,
+                                                                                self.npoints - len(left_to_sample),
+                                                                                replace=True)
+                idontcare = np.zeros(self.npoints, np.bool_)
+                idontcare[len(left_to_sample):self.npoints] = True
+                permut = np.random.permutation(range(self.npoints))
+                choice = choice[permut]
+                idontcare = idontcare[permut]
+                left_to_sample = []
+            else:
+                choice = np.random.permutation(left_to_sample)
+                left_to_sample = choice[self.npoints:]
+                choice = choice[:self.npoints]
+                idontcare = np.zeros(self.npoints, np.bool_)
+        else:
+            if self.avoid_duplicates and nLidarPoints >= self.npoints:
+                choice = np.random.choice(nLidarPoints, self.npoints, replace=False)
+            else:
+                choice = np.random.choice(nLidarPoints, self.npoints, replace=True)
+            idontcare = np.zeros(self.npoints, np.bool_)
+        return choice, idontcare, left_to_sample
 
     def show_points_per_box_statistics(self):
         import matplotlib.pyplot as plt
@@ -532,6 +684,8 @@ class FrustumDataset(object):
 #     tx,ty,tz = rotate_pc_along_y(np.expand_dims(center,0),-rot_angle).squeeze()
 #     ty += h/2.0
 #     return h,w,l,tx,ty,tz,ry
+
+
 
 if __name__=='__main__':
     import mayavi.mlab as mlab 

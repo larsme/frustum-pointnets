@@ -30,7 +30,8 @@ train/detection_results_v1/plot/
 
 train/pretrained/
 
-train/logs
+logs
 
 
 models/mono\+stereo_1024x320/
+

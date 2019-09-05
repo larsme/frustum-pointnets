@@ -3,11 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="eb934e41-43d3-4685-a309-279245105d02" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/kitti/prepare_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/kitti/prepare_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/command_prep_data.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_prep_data.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/command_train_v1.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/command_train_v1.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/train/visualize.py" beforeDir="false" afterPath="$PROJECT_DIR$/train/visualize.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -51,7 +47,7 @@
       </list>
     </option>
   </component>
-  <component name="RunManager" selected="Python.visualize_guided_completion">
+  <component name="RunManager" selected="Python.depth_completion_2048">
     <configuration default="true" type="PythonConfigurationType" factoryName="Python">
       <module name="nconv" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -73,27 +69,6 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="basic" type="PythonConfigurationType" factoryName="Python">
-      <module name="frustum-pointnets" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/train/train.py" />
-      <option name="PARAMETERS" value="--gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzi_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --with_intensity --dont_input_box_probabilities" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
     <configuration name="depth_completion_2048" type="PythonConfigurationType" factoryName="Python">
       <module name="frustum-pointnets" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -107,7 +82,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/train/train.py" />
-      <option name="PARAMETERS" value="--gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyz_c_guided_completion_no_box_certainty_2048/train1 --num_point 2048 --max_epoch 100 --batch_size 20 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_guided_depth_completion --with_depth_confidences --avoid_point_duplicates" />
+      <option name="PARAMETERS" value="--gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzrgb_guided_completion_no_box_certainty_2048/train1 --num_point 2048 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --from_guided_depth_completion --avoid_point_duplicates --with_colors" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="false" />
@@ -149,7 +124,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/train/train.py" />
-      <option name="PARAMETERS" value="--gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzrgb_no_box_certainty_completion_augmentation/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors --depth_completion_augmentation" />
+      <option name="PARAMETERS" value="--gpu 0 --model frustum_pointnets_v1 --log_dir ./train/logs/xyz_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 32 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --depth_completion_augmentation --with_colors" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="false" />
@@ -317,7 +292,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/train/visualize.py" />
-      <option name="PARAMETERS" value="--split training --gpu 0 --model frustum_pointnets_v1 --num_point 1024 --dont_input_box_probabilities --with_colors --from_unguided_depth_completion --avoid_point_duplicates --restore_model_path ./logs/xyzrgb_unguided_completion_no_box_certainty/train1/model.ckpt" />
+      <option name="PARAMETERS" value="--split training --gpu 0 --model frustum_pointnets_v1 --num_point 1024 --dont_input_box_probabilities --with_colors --from_unguided_depth_completion --avoid_point_duplicates --restore_model_path ./train/logs/xyzrgb_unguided_completion_no_box_certainty/train1/model.ckpt" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="false" />
@@ -369,17 +344,17 @@
       <method v="2" />
     </configuration>
     <list>
+      <item itemvalue="Python.depth_completion_2048" />
       <item itemvalue="Python.depth_completion_augmentation" />
       <item itemvalue="Python.depth_completion_augmentation_with_colors" />
-      <item itemvalue="Python.depth_completion_2048" />
-      <item itemvalue="Python.basic" />
-      <item itemvalue="Python.visualize_lidar" />
-      <item itemvalue="Python.visualize_guided_completion" />
-      <item itemvalue="Python.visualize_monokular_prediction" />
-      <item itemvalue="Python.rgb_detection_visualize_lidar" />
-      <item itemvalue="Python.rgb_detection_visualize_unguided_completion" />
       <item itemvalue="Python.rgb_detection_visualize_guided_completion" />
+      <item itemvalue="Python.rgb_detection_visualize_lidar" />
       <item itemvalue="Python.rgb_detection_visualize_monokular_prediction" />
+      <item itemvalue="Python.rgb_detection_visualize_unguided_completion" />
+      <item itemvalue="Python.visualize_guided_completion" />
+      <item itemvalue="Python.visualize_lidar" />
+      <item itemvalue="Python.visualize_monokular_prediction" />
+      <item itemvalue="Python.visualize_unguided_completion" />
     </list>
   </component>
   <component name="SvnConfiguration">
@@ -423,18 +398,8 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/train/provider.py</url>
-          <line>333</line>
-          <option name="timeStamp" value="12" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/train/provider.py</url>
-          <line>435</line>
-          <option name="timeStamp" value="17" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/train/provider.py</url>
-          <line>426</line>
-          <option name="timeStamp" value="19" />
+          <line>232</line>
+          <option name="timeStamp" value="5" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
