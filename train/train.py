@@ -22,7 +22,6 @@ import train.provider as provider
 from train.train_util import get_batch
 from train.mkdir_p import mkdir_p
 
-EPOCH_CNT = 0
 NUM_CLASSES = 2  # segmentation net has two classes
 NUM_REAL_CLASSES = 3
 REAL_CLASSES = ['Car', 'Pedestrian', 'Cyclist']
@@ -32,7 +31,7 @@ BN_DECAY_CLIP = 0.99
 
 FLAGS = BATCH_SIZE = NUM_POINT = MAX_EPOCH = BASE_LEARNING_RATE = GPU_INDEX = MOMENTUM = OPTIMIZER \
     = DECAY_STEP = DECAY_RATE = NUM_CHANNEL = TRAIN_DATASET = TEST_DATASET = MODEL = MODEL_FILE = LOG_DIR = LOG_FOUT \
-    = BN_DECAY_DECAY_STEP = 0
+    = BN_DECAY_DECAY_STEP = EPOCH_CNT = 0
 
 def log_string(out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -62,7 +61,7 @@ def get_bn_decay(batch):
 def train():
     global FLAGS, BATCH_SIZE, NUM_POINT, MAX_EPOCH, BASE_LEARNING_RATE, GPU_INDEX, MOMENTUM, OPTIMIZER, \
         DECAY_STEP, DECAY_RATE, NUM_CHANNEL, TRAIN_DATASET, TEST_DATASET, MODEL, MODEL_FILE, LOG_DIR, LOG_FOUT, \
-        BN_DECAY_DECAY_STEP
+        BN_DECAY_DECAY_STEP, EPOCH_CNT
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
@@ -91,6 +90,7 @@ def train():
     parser.add_argument('--avoid_point_duplicates', action='store_true',
                         help='Try to avoid point duplicates when sampling')
     parser.add_argument('--depth_completion_augmentation', action='store_true')
+    parser.add_argument('--restore_epoch', type=int, default=0, help='epoch count of checkpoint')
     FLAGS = parser.parse_args()
 
     # Set training configurations
@@ -110,6 +110,7 @@ def train():
         NUM_CHANNEL = NUM_CHANNEL + 1
     if FLAGS.with_colors:
         NUM_CHANNEL = NUM_CHANNEL + 3
+    EPOCH_CNT = FLAGS.restore_epoch
 
 
     # Load Frustum Datasets. Use default data paths
@@ -303,7 +304,7 @@ def train():
                'step': batch}
 
         # eval_one_epoch(sess, ops, test_writer, class_writers)
-        for epoch in range(MAX_EPOCH):
+        for epoch in range(EPOCH_CNT, MAX_EPOCH):
             log_string('**** EPOCH %03d ****' % (epoch))
             sys.stdout.flush()
 
