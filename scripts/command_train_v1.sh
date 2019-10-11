@@ -86,6 +86,11 @@
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzirgb/train5 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --with_intensity --with_colors --restore_model_path ./logs/xyzirgb/train5/model.ckpt
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzirgb/train6 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --with_intensity --with_colors --restore_model_path ./logs/xyzirgb/train6/model.ckpt
 
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzirgb_no_box_certainty/train1 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --with_intensity --with_colors --dont_input_box_probabilities
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzirgb_no_box_certainty/train2 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --with_intensity --with_colors --dont_input_box_probabilities
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzirgb_no_box_certainty/train3 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --with_intensity --with_colors --dont_input_box_probabilities
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzirgb_no_box_certainty/train4 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --with_intensity --with_colors --dont_input_box_probabilities
+
 
 
 # depth completion augmentation
@@ -96,7 +101,7 @@
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzi_512/train4 --num_point 512 --max_epoch 100 --batch_size 100 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_intensity
 
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --restore_epoch 90 --restore_model_path ./logs/xyz_no_box_certainty_completion_augmentation/train1/model.ckpt --log_dir ./logs/xyz_no_box_certainty_completion_augmentation/train1 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --depth_completion_augmentation
-python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzrgb_no_box_certainty_completion_augmentation/train1 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors --depth_completion_augmentation
+#python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzrgb_no_box_certainty_completion_augmentation/train1 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors --depth_completion_augmentation
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyz_no_box_certainty_completion_augmentation/train2 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --depth_completion_augmentation
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyzrgb_no_box_certainty_completion_augmentation/train2 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --with_colors --depth_completion_augmentation
 #python train/train.py --gpu 0 --model frustum_pointnets_v1 --log_dir ./logs/xyz_no_box_certainty_completion_augmentation/train3 --num_point 1024 --max_epoch 100 --batch_size 50 --decay_step 800000 --decay_rate 0.5 --dont_input_box_probabilities --depth_completion_augmentation

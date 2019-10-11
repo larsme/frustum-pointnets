@@ -480,8 +480,12 @@ def show_image_with_3d_boxes(img, objects, calib, title):
     fig.save(title+'.png')
 
 
-def show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, box_class_list, title):
+def show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, box_class_list, pts_image_2d, title):
     label_img = np.zeros_like(img)
+    # if pts_image_2d is None:
+    #     label_img = np.ones_like(img)*255
+    # else:
+    #     label_img[pts_image_2d[:,1],pts_image_2d[:,0]] = 255
     labeled = np.zeros((img.shape[0], img.shape[1]), np.int_)
     for box_i in range(len(box_class_list)):
         box_color = class_to_color(box_class_list[box_i])
@@ -581,7 +585,7 @@ while True:
         s2 = 'gt_boxes'
     show_image_with_2d_boxes(img, det_box_geometry_list, det_box_class_list, 'img_with_2D_%s' % s2)
     show_image_with_3d_boxes(img, label_objects, calib, 'img_with_3D_%s' % s2)
-    show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, det_box_class_list,
+    show_segmented_image(img, pts_2d_in_box_list, pc_in_box_labels_list, det_box_class_list, pts_image_2d,
                          'gt_lidar_labels_with_%s' % s2)
     if FLAGS.from_guided_depth_completion:
         s = 'guided_depth_completion'
@@ -592,9 +596,9 @@ while True:
     else:
         s = 'lidar_only'
     if use_depth_net:
-        show_segmented_image(img, pts_2d_in_box_list, pc_in_box_custom_labels_list, det_box_class_list,
+        show_segmented_image(img, pts_2d_in_box_list, pc_in_box_custom_labels_list, det_box_class_list, None,
                              'ideal_labels_%s_with_%s' % (s, s2))
-        show_segmented_image(img, pts_2d_in_box_list, completed_box_pred_labels_list, det_box_class_list,
+        show_segmented_image(img, pts_2d_in_box_list, completed_box_pred_labels_list, det_box_class_list, None,
                              'predicted_labels_%s_with_%s' % (s, s2))
-    show_segmented_image(img, pts_2d_in_box_list, box_pred_labels_list, det_box_class_list,
+    show_segmented_image(img, pts_2d_in_box_list, box_pred_labels_list, det_box_class_list, pts_image_2d,
                          'predicted_lidar_labels_%s_with_%s' % (s, s2))
