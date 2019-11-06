@@ -139,6 +139,7 @@ class FrustumDataset(object):
         assert split == 'train' or not depth_completion_augmentation
         assert not with_intensity or not depth_completion_augmentation
 
+        self.split = split
         self.classes = classes
         self.npoints = npoints
         self.random_flip = random_flip
@@ -497,6 +498,7 @@ class FrustumDataset(object):
 
     def show_points_per_box_statistics(self):
         import matplotlib.pyplot as plt
+        import tikzplotlib
 
         points_per_box = []
         points_per_box.append([])
@@ -514,8 +516,9 @@ class FrustumDataset(object):
         print(np.mean(points_per_box[0]))
         print(np.var(points_per_box[0]))
         plt.hist(points_per_box[0], bins='auto')
-        plt.title('Points per box of type ' + self.classes[0])
-        plt.savefig('Points per box of type ' + self.classes[0])
+        plt.title(self.split + ' - '+ 'Points per box of type ' + self.classes[0])
+        plt.savefig(self.split + ' - '+ 'Points per box of type ' + self.classes[0])
+        tikzplotlib.save(self.split + ' - '+ 'Points per box of type ' + self.classes[0]+".tikz")
         plt.show()
         print()
 
@@ -526,8 +529,9 @@ class FrustumDataset(object):
         print(np.mean(points_per_box[1]))
         print(np.var(points_per_box[1]))
         plt.hist(points_per_box[1], bins='auto')
-        plt.title('Points per box of type ' + self.classes[1])
-        plt.savefig('Points per box of type ' + self.classes[1])
+        plt.title(self.split + ' - '+ 'Points per box of type ' + self.classes[1])
+        plt.savefig(self.split + ' - '+ 'Points per box of type ' + self.classes[1])
+        tikzplotlib.save(self.split + ' - '+ 'Points per box of type ' + self.classes[1]+".tikz")
         plt.show()
         print()
 
@@ -538,8 +542,9 @@ class FrustumDataset(object):
         print(np.mean(points_per_box[2]))
         print(np.var(points_per_box[2]))
         plt.hist(points_per_box[2], bins='auto')
-        plt.title('Points per box of type ' + self.classes[2])
-        plt.savefig('Points per box of type ' + self.classes[2])
+        plt.title(self.split + ' - '+ 'Points per box of type ' + self.classes[2])
+        plt.savefig(self.split + ' - '+ 'Points per box of type ' + self.classes[2])
+        tikzplotlib.save(self.split + ' - '+ 'Points per box of type ' + self.classes[2]+".tikz")
         plt.show()
         print()
 
@@ -547,8 +552,9 @@ class FrustumDataset(object):
 
         print('Ges')
         plt.hist(points_per_box_ges, bins='auto')
-        plt.title('Points per box of any type')
-        plt.savefig('Points per box of any type')
+        plt.title(self.split + ' - '+ 'Points per box of any type')
+        plt.savefig(self.split + ' - '+ 'Points per box of any type')
+        tikzplotlib.save(self.split + ' - '+ 'Points per box of any type'+".tikz")
         plt.show()
         print(len(points_per_box_ges))
         print(np.mean(points_per_box_ges))

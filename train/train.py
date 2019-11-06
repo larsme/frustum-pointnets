@@ -91,6 +91,7 @@ def train():
                         help='Try to avoid point duplicates when sampling')
     parser.add_argument('--depth_completion_augmentation', action='store_true')
     parser.add_argument('--restore_epoch', type=int, default=0, help='epoch count of checkpoint')
+    parser.add_argument('--show_point_statistics', action='store_true')
     FLAGS = parser.parse_args()
 
     # Set training configurations
@@ -125,6 +126,9 @@ def train():
                                             from_depth_prediction=FLAGS.from_depth_prediction,
                                             segment_all_points=False, avoid_duplicates=FLAGS.avoid_point_duplicates,
                                             depth_completion_augmentation=FLAGS.depth_completion_augmentation)
+    if FLAGS.show_point_statistics:
+        TRAIN_DATASET.show_points_per_box_statistics()
+
     print('--- Loading Testing Dataset ---')
     TEST_DATASET = provider.FrustumDataset(npoints=NUM_POINT, split='val', classes=REAL_CLASSES,
                                            random_flip=False, random_shift=False,
@@ -136,6 +140,8 @@ def train():
                                            from_depth_prediction=FLAGS.from_depth_prediction,
                                            segment_all_points=True, avoid_duplicates=FLAGS.avoid_point_duplicates,
                                            depth_completion_augmentation=False)
+    if FLAGS.show_point_statistics:
+        TEST_DATASET.show_points_per_box_statistics()
 
     print('--- Loading Model ---')
     MODEL = importlib.import_module(FLAGS.model)  # import network module

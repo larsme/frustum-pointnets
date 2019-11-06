@@ -431,6 +431,8 @@ def show_points_per_box_statistics(split_file_datapath,
                      from_rgb_detection=True,
                      rgb_det_filename="",
                      img_height_threshold=25):
+    import tikzplotlib
+    import matplotlib.pyplot as plt
 
     image_idx_list = [int(line.rstrip()) for line in open(split_file_datapath)]
     dataset = kitti_object(os.path.join(ROOT_DIR, './../../data/kitti_object'), split)
@@ -465,7 +467,6 @@ def show_points_per_box_statistics(split_file_datapath,
                         ges_points_per_box.append((xmax - xmin) * (ymax - ymin))
                     break
 
-    import matplotlib.pyplot as plt
 
     for i in range(len(type_whitelist)):
         print(type_whitelist[i])
@@ -475,6 +476,7 @@ def show_points_per_box_statistics(split_file_datapath,
         plt.hist(points_per_box[i], bins='auto')
         plt.title('Pixels per box of type ' + type_whitelist[i])
         plt.savefig(train_split+' - '+'Pixels per box of type ' + type_whitelist[i])
+        tikzplotlib.save(train_split+' - '+'Pixels per box of type ' + type_whitelist[i]+".tikz")
         plt.show()
         print()
 
@@ -482,6 +484,7 @@ def show_points_per_box_statistics(split_file_datapath,
     plt.hist(ges_points_per_box, bins='auto')
     plt.title('Pixels per box of any type')
     plt.savefig(train_split+' - '+'Pixels per box of any type')
+    tikzplotlib.save(train_split+' - '+'Pixels per box of any type.tikz')
     plt.show()
     print(len(ges_points_per_box))
     print(np.mean(ges_points_per_box))
